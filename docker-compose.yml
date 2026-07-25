@@ -62,7 +62,7 @@ services:
     logging: *default-logging
 
   migration:
-    image: korporate-ai-backend:0.1.0
+    image: korporate-ai-backend:0.2.0
     build:
       context: ./app/api
 
@@ -80,7 +80,7 @@ services:
     environment:
       APP_NAME: Korporate AI Logistics Platform
       APP_ENV: production
-      APP_VERSION: 0.1.0
+      APP_VERSION: 0.2.0
 
       DB_HOST: postgres
       DB_PORT: "5432"
@@ -110,8 +110,38 @@ services:
 
     logging: *default-logging
 
+  importer:
+    image: korporate-ai-importer:0.2.0
+    build:
+      context: .
+      dockerfile: app/importer/Dockerfile
+
+    profiles:
+      - tools
+
+    restart: "no"
+    init: true
+
+    command:
+      - --help
+
+    mem_limit: 1024m
+    cpus: 1.0
+    pids_limit: 180
+
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+
+    networks:
+      - backend
+
+    logging: *default-logging
+
   api:
-    image: korporate-ai-backend:0.1.0
+    image: korporate-ai-backend:0.2.0
     build:
       context: ./app/api
 
@@ -121,7 +151,7 @@ services:
     environment:
       APP_NAME: Korporate AI Logistics Platform
       APP_ENV: production
-      APP_VERSION: 0.1.0
+      APP_VERSION: 0.2.0
 
       DB_HOST: postgres
       DB_PORT: "5432"
@@ -173,7 +203,7 @@ services:
     logging: *default-logging
 
   dashboard:
-    image: korporate-ai-dashboard:0.1.0
+    image: korporate-ai-dashboard:0.2.0
     build:
       context: ./app/dashboard
 
@@ -183,7 +213,7 @@ services:
     environment:
       APP_NAME: Korporate AI Logistics Platform
       APP_ENV: production
-      APP_VERSION: 0.1.0
+      APP_VERSION: 0.2.0
       API_BASE_URL: http://api:8000
       HOME: /tmp
 

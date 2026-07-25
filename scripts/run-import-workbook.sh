@@ -12,6 +12,9 @@ Volby odovzdane orchestratoru:
 
 Workbook musi byt ulozeny pod:
   /srv/korporate-ai/imports/manual
+
+Importer image:
+  korporate-ai-importer:0.2.0
 EOF
 }
 
@@ -25,6 +28,7 @@ REPOSITORY_ROOT="$(
     pwd
 )"
 MANUAL_IMPORT_ROOT="/srv/korporate-ai/imports/manual"
+IMPORTER_IMAGE="${KORPORATE_IMPORTER_IMAGE:-korporate-ai-importer:0.2.0}"
 WORKBOOK_HOST="$(realpath -e "$1")"
 shift
 
@@ -41,15 +45,15 @@ WORKBOOK_RELATIVE="${WORKBOOK_HOST#"$MANUAL_IMPORT_ROOT"/}"
 WORKBOOK_CONTAINER="/imports/$WORKBOOK_RELATIVE"
 
 PASSWORD_FILE="$REPOSITORY_ROOT/secrets/postgres_app_password"
-ORCHESTRATOR="$REPOSITORY_ROOT/scripts/import-workbook.py"
 
 test -f "$PASSWORD_FILE" || {
     echo "CHYBA: chyba DB secret $PASSWORD_FILE" >&2
     exit 2
 }
 
-test -f "$ORCHESTRATOR" || {
-    echo "CHYBA: chyba orchestrator $ORCHESTRATOR" >&2
+docker image inspect "$IMPORTER_IMAGE" >/dev/null 2>&1 || {
+    echo "CHYBA: chyba Docker image $IMPORTER_IMAGE" >&2
+    echo "Spusti: docker compose --profile tools build importer" >&2
     exit 2
 }
 
@@ -66,41 +70,17 @@ test -n "$BACKEND_NETWORK" || {
     exit 2
 }
 
-DEPS_VOLUME="korporate-ai-import-deps-$(date +%s)-$$"
-
-cleanup() {
-    docker volume rm "$DEPS_VOLUME" >/dev/null 2>&1 || true
-}
-trap cleanup EXIT
-
-docker volume create "$DEPS_VOLUME" >/dev/null
-
 docker run --rm \
-    -v "$DEPS_VOLUME":/deps \
-    -e PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    python:3.12-slim \
-    python -m pip install \
-        --no-cache-dir \
-        --root-user-action=ignore \
-        --target /deps \
-        openpyxl==3.1.5 \
-        "psycopg[binary]>=3.2,<4"
-
-docker run --rm \
+    --pull never \
     --network "$BACKEND_NETWORK" \
     --memory 1024m \
     --cpus 1.0 \
     --pids-limit 180 \
     --cap-drop ALL \
     --security-opt no-new-privileges:true \
-    -e PYTHONPATH=/deps \
-    -v "$DEPS_VOLUME":/deps:ro \
-    -v "$REPOSITORY_ROOT":/workspace:ro \
     -v "$MANUAL_IMPORT_ROOT":/imports \
     -v "$PASSWORD_FILE":/run/secrets/postgres_app_password:ro \
-    -w /workspace \
-    python:3.12-slim \
-    python scripts/import-workbook.py \
+    "$IMPORTER_IMAGE" \
         "$WORKBOOK_CONTAINER" \
         --source-path "$WORKBOOK_HOST" \
         --archive-root /imports/archive \

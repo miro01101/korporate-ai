@@ -9,7 +9,7 @@ APP_NAME = os.getenv(
     "APP_NAME",
     "Korporate AI Logistics Platform",
 )
-APP_VERSION = os.getenv("APP_VERSION", "0.1.0")
+APP_VERSION = os.getenv("APP_VERSION", "0.2.0")
 APP_ENV = os.getenv("APP_ENV", "production")
 API_BASE_URL = os.getenv("API_BASE_URL", "http://api:8000")
 
@@ -22,7 +22,7 @@ st.set_page_config(
 
 st.title("Korporate AI Logistics Platform")
 st.caption(
-    f"Platform Skeleton {APP_VERSION} · prostredie: {APP_ENV}"
+    f"XLSX Import MVP {APP_VERSION} · prostredie: {APP_ENV}"
 )
 
 try:

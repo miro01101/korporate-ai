@@ -1,0 +1,17 @@
+.git
+.gitignore
+secrets
+**/secrets
+*.xlsx
+*.xls
+*.json
+*.sql
+*.dump
+*.backup
+__pycache__
+*.py[cod]
+.pytest_cache
+.mypy_cache
+.venv
+.env
+docs
