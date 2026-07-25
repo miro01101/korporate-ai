@@ -16,7 +16,7 @@ Required conditions:
 
 - PostgreSQL, API, and dashboard containers are healthy.
 - Database migration is at `0006_platform_version`.
-- Docker image `korporate-ai-importer:0.2.0` exists.
+- Docker image `korporate-ai-importer:0.3.0` exists.
 - The workbook is located under `/srv/korporate-ai/imports/manual`.
 - The application database secret exists at `secrets/postgres_app_password`.
 
@@ -25,7 +25,7 @@ Verify:
 ```bash
 docker compose ps
 docker compose --profile tools run --rm migration alembic current
-docker image inspect korporate-ai-importer:0.2.0 >/dev/null
+docker image inspect korporate-ai-importer:0.3.0 >/dev/null
 ```
 
 ## Directory layout

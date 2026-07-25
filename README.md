@@ -2,26 +2,21 @@
 
 ## Version
 
-v0.2.0 – XLSX Import MVP
+v0.3.0 – Analytics Mart and Management Dashboard
 
 ## Implemented scope
 
-The platform now supports the complete manual XLSX import lifecycle:
-
 ```text
 XLSX
--> structural validation
--> value validation
--> business validation
--> audit batch
--> raw JSONB layer
--> typed staging layer
--> normalized core model
--> JSON import report
--> verified archive
+→ validation
+→ audit
+→ raw
+→ staging
+→ normalized core
+→ analytical marts
+→ FastAPI analytics
+→ Streamlit management dashboard
 ```
-
-The import is idempotent by SHA-256. Reprocessing the same workbook does not duplicate raw, staging, or core data.
 
 ## Services
 
@@ -29,88 +24,68 @@ The import is idempotent by SHA-256. Reprocessing the same workbook does not dup
 - FastAPI
 - Streamlit
 - Alembic migrations
-- Dedicated XLSX importer image
+- XLSX importer and mart refresh tools
 
-## Local server endpoints
-
-Services remain bound only to the server loopback interface.
+## Endpoints
 
 - API: http://127.0.0.1:18000
 - API readiness: http://127.0.0.1:18000/health/ready
+- Analytics status: http://127.0.0.1:18000/api/v1/analytics/status
+- OpenAPI: http://127.0.0.1:18000/docs
 - Dashboard: http://127.0.0.1:18501
-- Streamlit health: http://127.0.0.1:18501/_stcore/health
+
+All endpoints remain bound to the server loopback interface.
 
 ## Manual XLSX import
 
-Place the workbook in:
-
-```text
-/srv/korporate-ai/imports/manual/incoming
+```bash
+scripts/run-import-workbook.sh \
+  /srv/korporate-ai/imports/manual/incoming/workbook.xlsx \
+  --created-by manual-user \
+  --move-source
 ```
 
-Run:
+## Refresh analytical marts
 
 ```bash
-scripts/run-import-workbook.sh   /srv/korporate-ai/imports/manual/incoming/workbook.xlsx   --created-by manual-user   --move-source
+docker compose --profile tools run --rm analytics-refresh
+docker compose --profile tools run --rm analytics-validate
 ```
 
-The importer writes verified artifacts to:
-
-```text
-/srv/korporate-ai/imports/manual/archive/YYYY/MM
-/srv/korporate-ai/imports/manual/reports
-```
-
-See `docs/import-runbook.md` for operations and recovery procedures.
-
-## Common commands
-
-Run commands from `/opt/korporate-ai`:
+## Smoke tests
 
 ```bash
-docker compose config --quiet
-docker compose ps
-docker compose logs --tail 100
-docker compose --profile tools build importer
-docker compose --profile tools run --rm migration
 scripts/smoke-test.sh
+python3 scripts/smoke-test-analytics-api.py
 ```
+
+## Analytics outputs
+
+- monthly sales and estimated gross margin,
+- product and category performance,
+- inventory health and days of cover,
+- supplier fill rate and lead-time performance,
+- expedition process metrics,
+- own-fleet capacity utilization,
+- consolidated monthly management scorecard.
+
+See:
+
+- `docs/import-runbook.md`
+- `docs/analytics-runbook.md`
 
 ## Security
 
-Never commit:
+Never commit secrets, XLSX files, generated JSON reports, database dumps, or backups.
 
-- files from `secrets/`,
-- XLSX source files,
-- generated JSON reports,
-- database dumps.
+PostgreSQL is not exposed on a host port. The dashboard reads analytical data through FastAPI and does not connect directly to the database.
 
-PostgreSQL must not be published on a host port. API and dashboard remain loopback-only until reverse proxy integration is configured.
-
-The importer container uses dropped Linux capabilities, `no-new-privileges`, bounded memory/CPU/PIDs, a read-only database secret mount, and write access only to the manual import directory.
-
-## Database state
-
-The XLSX pipeline uses:
-
-- `audit.import_batches`
-- `audit.import_issues`
-- `raw.xlsx_*`
-- `stg.*`
-- normalized `core.*` logistics tables
-
-Current migration head for v0.2.0:
+## Current database revision
 
 ```text
-0006_platform_version
+0008_platform_version
 ```
 
 ## Next milestone
 
-Build analytical marts and dashboard outputs for:
-
-- sales and gross margin,
-- inventory health and turnover,
-- procurement performance,
-- expedition and vehicle utilization,
-- management KPI reporting.
+Add authentication, tenant/company isolation, scheduled imports and refreshes, and agency-ready downloadable reports.

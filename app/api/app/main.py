@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
+from app.analytics import router as analytics_router
 from app.config import get_settings
 from app.db import get_database_health
 
@@ -13,6 +14,8 @@ app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,
 )
+
+app.include_router(analytics_router)
 
 
 @app.get("/")

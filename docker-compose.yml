@@ -62,7 +62,7 @@ services:
     logging: *default-logging
 
   migration:
-    image: korporate-ai-backend:0.2.0
+    image: korporate-ai-backend:0.3.0
     build:
       context: ./app/api
 
@@ -80,7 +80,7 @@ services:
     environment:
       APP_NAME: Korporate AI Logistics Platform
       APP_ENV: production
-      APP_VERSION: 0.2.0
+      APP_VERSION: 0.3.0
 
       DB_HOST: postgres
       DB_PORT: "5432"
@@ -111,7 +111,7 @@ services:
     logging: *default-logging
 
   importer:
-    image: korporate-ai-importer:0.2.0
+    image: korporate-ai-importer:0.3.0
     build:
       context: .
       dockerfile: app/importer/Dockerfile
@@ -140,8 +140,92 @@ services:
 
     logging: *default-logging
 
+  analytics-refresh:
+    image: korporate-ai-importer:0.3.0
+    build:
+      context: .
+      dockerfile: app/importer/Dockerfile
+
+    profiles:
+      - tools
+
+    restart: "no"
+    init: true
+
+    entrypoint:
+      - python
+      - /app/scripts/refresh-analytics-marts.py
+
+    command:
+      - --db-password-file
+      - /run/secrets/postgres_app_password
+
+    secrets:
+      - postgres_app_password
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    mem_limit: 1024m
+    cpus: 1.0
+    pids_limit: 180
+
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+
+    networks:
+      - backend
+
+    logging: *default-logging
+
+  analytics-validate:
+    image: korporate-ai-importer:0.3.0
+    build:
+      context: .
+      dockerfile: app/importer/Dockerfile
+
+    profiles:
+      - tools
+
+    restart: "no"
+    init: true
+
+    entrypoint:
+      - python
+      - /app/scripts/validate-analytics-marts.py
+
+    command:
+      - --db-password-file
+      - /run/secrets/postgres_app_password
+
+    secrets:
+      - postgres_app_password
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    mem_limit: 512m
+    cpus: 0.50
+    pids_limit: 100
+
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+
+    networks:
+      - backend
+
+    logging: *default-logging
+
   api:
-    image: korporate-ai-backend:0.2.0
+    image: korporate-ai-backend:0.3.0
     build:
       context: ./app/api
 
@@ -151,7 +235,7 @@ services:
     environment:
       APP_NAME: Korporate AI Logistics Platform
       APP_ENV: production
-      APP_VERSION: 0.2.0
+      APP_VERSION: 0.3.0
 
       DB_HOST: postgres
       DB_PORT: "5432"
@@ -203,7 +287,7 @@ services:
     logging: *default-logging
 
   dashboard:
-    image: korporate-ai-dashboard:0.2.0
+    image: korporate-ai-dashboard:0.3.0
     build:
       context: ./app/dashboard
 
@@ -213,7 +297,7 @@ services:
     environment:
       APP_NAME: Korporate AI Logistics Platform
       APP_ENV: production
-      APP_VERSION: 0.2.0
+      APP_VERSION: 0.3.0
       API_BASE_URL: http://api:8000
       HOME: /tmp
 
