@@ -1,0 +1,26 @@
+# Secrets
+secrets/*
+!secrets/.gitkeep
+.env
+.env.*
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.venv/
+
+# Application data
+data/
+imports/
+exports/
+backups/
+quarantine/
+temp/
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
