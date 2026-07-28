@@ -1,20 +1,81 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -uo pipefail
 
 REPOSITORY_ROOT="$(
   cd "$(dirname "${BASH_SOURCE[0]}")/.."
   pwd
 )"
-cd "$REPOSITORY_ROOT"
+cd "$REPOSITORY_ROOT" || exit 1
 
 IMPORTER_IMAGE="${KORPORATE_IMPORTER_IMAGE:-korporate-ai-importer:0.4.0}"
 IMPORT_ROOT="/srv/korporate-ai/imports/manual"
+
 DB_PASSWORD_FILE="$REPOSITORY_ROOT/secrets/postgres_app_password"
 SERVICE_ACCOUNT_FILE="$REPOSITORY_ROOT/secrets/google_drive_service_account.json"
 FOLDER_ID_FILE="$REPOSITORY_ROOT/secrets/google_drive_folder_id"
+
+SMTP_CONFIG="$REPOSITORY_ROOT/secrets/smtp_alert.json"
+SMTP_PASSWORD_FILE="$REPOSITORY_ROOT/secrets/smtp_alert_password"
+EMAIL_HELPER="$REPOSITORY_ROOT/scripts/send-email-alert.py"
+
 LOCK_FILE="/run/lock/korporate-ai-google-drive.lock"
+LOG_FILE="$(mktemp)"
+ALERT_BODY_FILE="$(mktemp)"
+
+cleanup() {
+  rm -f "$LOG_FILE" "$ALERT_BODY_FILE"
+}
+
+trap cleanup EXIT
+
+send_failure_alert() {
+  local exit_code="$1"
+  local reason="$2"
+
+  {
+    echo "Korporate AI Google Drive pipeline zlyhal."
+    echo
+    echo "Server: $(hostname)"
+    echo "Čas UTC: $(date -u -Is)"
+    echo "Exit code: $exit_code"
+    echo "Dôvod: $reason"
+    echo
+    echo "Posledných 120 riadkov výstupu:"
+    tail -n 120 "$LOG_FILE" 2>/dev/null || true
+  } > "$ALERT_BODY_FILE"
+
+  if \
+    [ -s "$SMTP_CONFIG" ] &&
+    [ -s "$SMTP_PASSWORD_FILE" ] &&
+    [ -x "$EMAIL_HELPER" ]
+  then
+    if python3 "$EMAIL_HELPER" \
+      --config "$SMTP_CONFIG" \
+      --password-file "$SMTP_PASSWORD_FILE" \
+      --subject "Korporate AI – Google Drive pipeline zlyhal" \
+      --body-file "$ALERT_BODY_FILE"
+    then
+      echo "PIPELINE_EMAIL_ALERT=sent"
+    else
+      echo "PIPELINE_EMAIL_ALERT=failed" >&2
+    fi
+  else
+    echo "PIPELINE_EMAIL_ALERT=not_configured" >&2
+  fi
+}
+
+fail_pipeline() {
+  local exit_code="$1"
+  shift
+  local reason="$*"
+
+  echo "CHYBA: $reason" | tee -a "$LOG_FILE" >&2
+  send_failure_alert "$exit_code" "$reason"
+  exit "$exit_code"
+}
 
 exec 9>"$LOCK_FILE"
+
 if ! flock -n 9; then
   echo "PIPELINE_SKIPPED=host_lock_not_acquired"
   exit 0
@@ -25,23 +86,20 @@ for REQUIRED_FILE in \
   "$SERVICE_ACCOUNT_FILE" \
   "$FOLDER_ID_FILE"
 do
-  if [ ! -f "$REQUIRED_FILE" ]; then
-    echo "CHYBA: chýba required file $REQUIRED_FILE" >&2
-    exit 2
+  if [ ! -s "$REQUIRED_FILE" ]; then
+    fail_pipeline 2 "chýba required file $REQUIRED_FILE"
   fi
 done
 
 if ! docker image inspect "$IMPORTER_IMAGE" >/dev/null 2>&1; then
-  echo "CHYBA: chýba image $IMPORTER_IMAGE" >&2
-  exit 2
+  fail_pipeline 2 "chýba Docker image $IMPORTER_IMAGE"
 fi
 
 POSTGRES_CID="$(docker compose ps -q postgres)"
 API_CID="$(docker compose ps -q api)"
 
 if [ -z "$POSTGRES_CID" ] || [ -z "$API_CID" ]; then
-  echo "CHYBA: PostgreSQL alebo API kontajner nebeží" >&2
-  exit 2
+  fail_pipeline 2 "PostgreSQL alebo API kontajner nebeží"
 fi
 
 BACKEND_NETWORK="$(
@@ -53,8 +111,7 @@ BACKEND_NETWORK="$(
 )"
 
 if [ -z "$BACKEND_NETWORK" ]; then
-  echo "CHYBA: backend Docker network nebol nájdený" >&2
-  exit 2
+  fail_pipeline 2 "backend Docker network nebol nájdený"
 fi
 
 EGRESS_NETWORK=""
@@ -79,15 +136,19 @@ done < <(
 )
 
 if [ -z "$EGRESS_NETWORK" ]; then
-  echo "CHYBA: egress Docker network nebol nájdený" >&2
-  exit 2
+  fail_pipeline 2 "egress Docker network nebol nájdený"
 fi
 
-mkdir -p \
+if ! mkdir -p \
   "$IMPORT_ROOT/incoming" \
   "$IMPORT_ROOT/archive" \
   "$IMPORT_ROOT/reports" \
   "$IMPORT_ROOT/quarantine"
+then
+  fail_pipeline 2 "importné adresáre sa nepodarilo pripraviť"
+fi
+
+set +e
 
 docker run --rm \
   --pull never \
@@ -105,9 +166,28 @@ docker run --rm \
   --entrypoint python \
   "$IMPORTER_IMAGE" \
   /app/scripts/google-drive-pipeline.py \
-    --service-account-file /run/secrets/google_drive_service_account.json \
-    --folder-id-file /run/secrets/google_drive_folder_id \
+    --service-account-file \
+      /run/secrets/google_drive_service_account.json \
+    --folder-id-file \
+      /run/secrets/google_drive_folder_id \
     --import-root /imports \
-    --db-password-file /run/secrets/postgres_app_password \
+    --db-password-file \
+      /run/secrets/postgres_app_password \
     --created-by google-drive-service-account \
-    --max-attempts 3
+    --max-attempts 3 \
+  2>&1 | tee "$LOG_FILE"
+
+PIPELINE_EXIT_CODE="${PIPESTATUS[0]}"
+
+set -e
+
+if [ "$PIPELINE_EXIT_CODE" -ne 0 ]; then
+  send_failure_alert \
+    "$PIPELINE_EXIT_CODE" \
+    "orchestrátor vrátil nenulový exit code"
+
+  exit "$PIPELINE_EXIT_CODE"
+fi
+
+echo "GOOGLE_DRIVE_WRAPPER_OK=ANO"
+exit 0
