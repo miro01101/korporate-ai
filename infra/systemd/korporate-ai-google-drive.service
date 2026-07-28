@@ -1,0 +1,23 @@
+[Unit]
+Description=Korporate AI Google Drive XLSX pipeline
+Documentation=file:/opt/korporate-ai/docs/google-drive-automation-runbook.md
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+ConditionPathExists=/opt/korporate-ai/secrets/postgres_app_password
+ConditionPathExists=/opt/korporate-ai/secrets/google_drive_service_account.json
+ConditionPathExists=/opt/korporate-ai/secrets/google_drive_folder_id
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+WorkingDirectory=/opt/korporate-ai
+ExecStart=/opt/korporate-ai/scripts/run-google-drive-pipeline.sh
+TimeoutStartSec=45min
+UMask=0027
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+StandardOutput=journal
+StandardError=journal

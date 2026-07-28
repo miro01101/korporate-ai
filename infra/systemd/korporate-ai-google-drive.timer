@@ -1,0 +1,13 @@
+[Unit]
+Description=Hourly Korporate AI Google Drive XLSX check
+Documentation=file:/opt/korporate-ai/docs/google-drive-automation-runbook.md
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+RandomizedDelaySec=5m
+AccuracySec=1m
+Unit=korporate-ai-google-drive.service
+
+[Install]
+WantedBy=timers.target
