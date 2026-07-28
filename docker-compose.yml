@@ -225,7 +225,7 @@ services:
     logging: *default-logging
 
   api:
-    image: korporate-ai-backend:0.3.0
+    image: korporate-ai-backend:0.4.0
     build:
       context: ./app/api
 
@@ -235,7 +235,7 @@ services:
     environment:
       APP_NAME: Korporate AI Logistics Platform
       APP_ENV: production
-      APP_VERSION: 0.3.0
+      APP_VERSION: 0.4.0
 
       DB_HOST: postgres
       DB_PORT: "5432"
