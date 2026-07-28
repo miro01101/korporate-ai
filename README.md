@@ -2,7 +2,7 @@
 
 ## Version
 
-v0.3.0 – Analytics Mart and Management Dashboard
+v0.3.1 – Dashboard UI Polish
 
 ## Implemented scope
 

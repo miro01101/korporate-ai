@@ -10,15 +10,67 @@ APP_NAME = os.getenv(
     "APP_NAME",
     "Korporate AI Logistics Platform",
 )
-APP_VERSION = os.getenv("APP_VERSION", "0.3.0")
+APP_VERSION = os.getenv("APP_VERSION", "0.3.1")
 APP_ENV = os.getenv("APP_ENV", "production")
 API_BASE_URL = os.getenv("API_BASE_URL", "http://api:8000")
 
 
 st.set_page_config(
-    page_title="Korporate AI Logistics",
+    page_title="Korporate AI – Manažérsky dashboard",
     page_icon="📦",
     layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+st.markdown(
+    """
+    <style>
+    [data-testid="stToolbar"],
+    [data-testid="stDecoration"] {
+        display: none !important;
+    }
+
+    #MainMenu,
+    footer {
+        visibility: hidden !important;
+    }
+
+    .block-container {
+        max-width: 1680px;
+        padding-top: 2rem;
+        padding-bottom: 2rem;
+    }
+
+    [data-testid="stMetric"] {
+        border: 1px solid rgba(250, 250, 250, 0.08);
+        border-radius: 0.75rem;
+        padding: 0.8rem 1rem;
+        background: rgba(255, 255, 255, 0.025);
+    }
+
+    [data-testid="stMetricLabel"] {
+        min-height: 2.2rem;
+    }
+
+    [data-testid="stSidebar"] {
+        border-right: 1px solid rgba(250, 250, 250, 0.08);
+    }
+
+    div[data-testid="stDataFrame"] {
+        border: 1px solid rgba(250, 250, 250, 0.08);
+        border-radius: 0.6rem;
+        overflow: hidden;
+    }
+
+    .dashboard-note {
+        color: rgba(250, 250, 250, 0.66);
+        font-size: 0.86rem;
+        margin-top: -0.25rem;
+        margin-bottom: 1.25rem;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
 )
 
 
@@ -39,10 +91,7 @@ def api_get(
 def money(value: Any) -> str:
     if value is None:
         return "—"
-    return (
-        f"{float(value):,.2f} €"
-        .replace(",", " ")
-    )
+    return f"{float(value):,.2f} €".replace(",", " ")
 
 
 def number(value: Any, decimals: int = 0) -> str:
@@ -71,9 +120,176 @@ def month_label(value: str) -> str:
     return f"{month}/{year}"
 
 
+def translated_rows(
+    rows: list[dict[str, Any]],
+    mapping: dict[str, str],
+    month_field: str | None = None,
+) -> list[dict[str, Any]]:
+    output: list[dict[str, Any]] = []
+
+    for row in rows:
+        translated: dict[str, Any] = {}
+
+        for source, target in mapping.items():
+            value = row.get(source)
+            if source == month_field and value is not None:
+                value = month_label(value)
+            translated[target] = value
+
+        output.append(translated)
+
+    return output
+
+
+def line_chart(
+    rows: list[dict[str, Any]],
+    series: dict[str, str],
+    y_title: str,
+    tooltip_format: str = ",.2f",
+) -> None:
+    values: list[dict[str, Any]] = []
+
+    for row in rows:
+        for field, label in series.items():
+            value = row.get(field)
+            if value is not None:
+                values.append(
+                    {
+                        "month": row["month_start"],
+                        "series": label,
+                        "value": float(value),
+                    }
+                )
+
+    if not values:
+        st.info("Pre zvolené obdobie nie sú dostupné dáta.")
+        return
+
+    st.vega_lite_chart(
+        {
+            "data": {"values": values},
+            "mark": {
+                "type": "line",
+                "strokeWidth": 2.2,
+            },
+            "height": 300,
+            "encoding": {
+                "x": {
+                    "field": "month",
+                    "type": "temporal",
+                    "title": "Mesiac",
+                    "axis": {
+                        "format": "%m/%Y",
+                        "labelAngle": -40,
+                        "tickCount": 10,
+                        "grid": False,
+                    },
+                },
+                "y": {
+                    "field": "value",
+                    "type": "quantitative",
+                    "title": y_title,
+                    "scale": {"zero": True},
+                },
+                "color": {
+                    "field": "series",
+                    "type": "nominal",
+                    "title": None,
+                },
+                "tooltip": [
+                    {
+                        "field": "month",
+                        "type": "temporal",
+                        "title": "Mesiac",
+                        "format": "%m/%Y",
+                    },
+                    {
+                        "field": "series",
+                        "type": "nominal",
+                        "title": "Ukazovateľ",
+                    },
+                    {
+                        "field": "value",
+                        "type": "quantitative",
+                        "title": "Hodnota",
+                        "format": tooltip_format,
+                    },
+                ],
+            },
+        },
+        use_container_width=True,
+    )
+
+
+def horizontal_bar_chart(
+    rows: list[dict[str, Any]],
+    category_field: str,
+    value_field: str,
+    category_title: str,
+    value_title: str,
+    height: int,
+) -> None:
+    values = [
+        {
+            "category": row.get(category_field),
+            "value": float(row[value_field]),
+        }
+        for row in rows
+        if (
+            row.get(category_field) is not None
+            and row.get(value_field) is not None
+        )
+    ]
+
+    if not values:
+        st.info("Pre zvolené obdobie nie sú dostupné dáta.")
+        return
+
+    st.vega_lite_chart(
+        {
+            "data": {"values": values},
+            "mark": {
+                "type": "bar",
+                "cornerRadiusEnd": 3,
+            },
+            "height": height,
+            "encoding": {
+                "y": {
+                    "field": "category",
+                    "type": "nominal",
+                    "title": category_title,
+                    "sort": "-x",
+                    "axis": {"labelLimit": 340},
+                },
+                "x": {
+                    "field": "value",
+                    "type": "quantitative",
+                    "title": value_title,
+                    "scale": {"zero": True},
+                },
+                "tooltip": [
+                    {
+                        "field": "category",
+                        "type": "nominal",
+                        "title": category_title,
+                    },
+                    {
+                        "field": "value",
+                        "type": "quantitative",
+                        "title": value_title,
+                        "format": ",.2f",
+                    },
+                ],
+            },
+        },
+        use_container_width=True,
+    )
+
+
 st.title(APP_NAME)
 st.caption(
-    f"Analytics Mart {APP_VERSION} · prostredie: {APP_ENV}"
+    f"Manažérsky dashboard {APP_VERSION} · "
+    f"analytické jadro 0.3.0 · prostredie: {APP_ENV}"
 )
 
 try:
@@ -97,7 +313,9 @@ sales_months = [
 ]
 
 if not sales_months:
-    st.warning("Mart vrstva neobsahuje žiadne mesiace s predajom.")
+    st.warning(
+        "Mart vrstva neobsahuje žiadne mesiace s predajom."
+    )
     st.stop()
 
 
@@ -133,9 +351,17 @@ with st.sidebar:
     )
 
     st.divider()
-    if st.button("Obnoviť dáta"):
+
+    if st.button(
+        "Obnoviť dáta",
+        use_container_width=True,
+    ):
         st.cache_data.clear()
         st.rerun()
+
+    st.caption(
+        "Dáta sa automaticky ukladajú do cache na 60 sekúnd."
+    )
 
 
 date_parameters = {
@@ -199,13 +425,13 @@ st.subheader(
 metric_columns = st.columns(5)
 
 metric_columns[0].metric(
-    "Tržby",
+    "Tržby · vs. predchádzajúci mesiac",
     money(current.get("revenue")),
     delta=delta_percent(mom.get("revenue")),
 )
 
 metric_columns[1].metric(
-    "Hrubý zisk",
+    "Hrubý zisk · vs. predchádzajúci mesiac",
     money(current.get("gross_profit")),
     delta=delta_percent(mom.get("gross_profit")),
 )
@@ -216,15 +442,23 @@ metric_columns[2].metric(
 )
 
 metric_columns[3].metric(
-    "Objednávky",
+    "Objednávky · vs. predchádzajúci mesiac",
     number(current.get("sales_order_count")),
     delta=delta_percent(mom.get("sales_order_count")),
 )
 
 metric_columns[4].metric(
-    "Zákazníci",
+    "Zákazníci · vs. rovnaký mesiac minulého roka",
     number(current.get("customer_count")),
     delta=delta_percent(yoy.get("customer_count")),
+)
+
+st.markdown(
+    '<div class="dashboard-note">'
+    "Zelená alebo červená delta vyjadruje zmenu podľa porovnania "
+    "uvedeného v názve KPI."
+    "</div>",
+    unsafe_allow_html=True,
 )
 
 
@@ -245,18 +479,25 @@ with tabs[0]:
 
     with left:
         st.subheader("Tržby a hrubý zisk")
-        st.line_chart(
+        line_chart(
             monthly,
-            x="month_start",
-            y=["revenue", "gross_profit"],
+            {
+                "revenue": "Tržby",
+                "gross_profit": "Hrubý zisk",
+            },
+            "EUR",
         )
 
     with right:
         st.subheader("Objednávky a zákazníci")
-        st.line_chart(
+        line_chart(
             monthly,
-            x="month_start",
-            y=["sales_order_count", "customer_count"],
+            {
+                "sales_order_count": "Objednávky",
+                "customer_count": "Zákazníci",
+            },
+            "Počet",
+            tooltip_format=",.0f",
         )
 
     overview_columns = st.columns(4)
@@ -282,11 +523,64 @@ with tabs[0]:
         number(current.get("expedition_count")),
     )
 
-    st.subheader("Mesačný manažérsky dataset")
+    st.subheader("Mesačný manažérsky prehľad")
+
+    management_mapping = {
+        "month_start": "Mesiac",
+        "revenue": "Tržby",
+        "gross_profit": "Hrubý zisk",
+        "gross_margin_pct": "Hrubá marža",
+        "sales_order_count": "Objednávky",
+        "customer_count": "Zákazníci",
+        "inventory_cost_value": "Hodnota zásob",
+        "stockout_products": "Stockout",
+        "below_min_products": "Pod minimom",
+        "above_max_products": "Nad maximom",
+        "average_days_of_cover": "Days of cover",
+        "procurement_fill_rate_pct": "Fill rate",
+        "average_procurement_lead_time_days": "Lead time",
+        "expedition_count": "Expedície",
+    }
+
     st.dataframe(
-        monthly,
+        translated_rows(
+            monthly,
+            management_mapping,
+            month_field="month_start",
+        ),
         use_container_width=True,
         hide_index=True,
+        height=430,
+        column_config={
+            "Mesiac": st.column_config.TextColumn(
+                "Mesiac",
+                pinned=True,
+            ),
+            "Tržby": st.column_config.NumberColumn(
+                "Tržby",
+                format="%,.2f €",
+            ),
+            "Hrubý zisk": st.column_config.NumberColumn(
+                "Hrubý zisk",
+                format="%,.2f €",
+            ),
+            "Hrubá marža": st.column_config.NumberColumn(
+                "Hrubá marža",
+                format="%.1f %%",
+            ),
+            "Hodnota zásob": st.column_config.NumberColumn(
+                "Hodnota zásob",
+                format="%,.2f €",
+            ),
+            "Fill rate": st.column_config.NumberColumn(
+                "Fill rate",
+                format="%.1f %%",
+            ),
+            "Lead time": st.column_config.NumberColumn(
+                "Lead time",
+                format="%.1f dňa",
+            ),
+        },
     )
 
 
@@ -294,31 +588,58 @@ with tabs[1]:
     st.subheader("Top produkty podľa tržieb")
 
     products = products_payload.get("items", [])
-    st.bar_chart(
+
+    horizontal_bar_chart(
         products,
-        x="product_name",
-        y="revenue",
+        "product_name",
+        "revenue",
+        "Produkt",
+        "Tržby (EUR)",
+        height=max(300, top_limit * 28),
     )
 
+    product_mapping = {
+        "product_id": "ID produktu",
+        "product_name": "Produkt",
+        "category": "Kategória",
+        "supplier_name": "Dodávateľ",
+        "units_sold": "Predané množstvo",
+        "revenue": "Tržby",
+        "gross_profit": "Hrubý zisk",
+        "gross_margin_pct": "Hrubá marža",
+    }
+
     st.dataframe(
-        products,
+        translated_rows(products, product_mapping),
         use_container_width=True,
         hide_index=True,
-        column_order=[
-            "product_id",
-            "product_name",
-            "category",
-            "supplier_name",
-            "units_sold",
-            "revenue",
-            "gross_profit",
-            "gross_margin_pct",
-        ],
+        column_config={
+            "Produkt": st.column_config.TextColumn(
+                "Produkt",
+                width="large",
+            ),
+            "Dodávateľ": st.column_config.TextColumn(
+                "Dodávateľ",
+                width="large",
+            ),
+            "Tržby": st.column_config.NumberColumn(
+                "Tržby",
+                format="%,.2f €",
+            ),
+            "Hrubý zisk": st.column_config.NumberColumn(
+                "Hrubý zisk",
+                format="%,.2f €",
+            ),
+            "Hrubá marža": st.column_config.NumberColumn(
+                "Hrubá marža",
+                format="%.1f %%",
+            ),
+        },
     )
 
     st.caption(
         "Hrubá marža používa poslednú známu nákupnú cenu "
-        "k dátumu predaja; pri chýbajúcej histórii sa použije "
+        "k dátumu predaja. Ak historická cena chýba, použije sa "
         "nákupná cena z kmeňa produktu."
     )
 
@@ -351,64 +672,138 @@ with tabs[2]:
     )
 
     st.subheader("Vývoj skladových rizík")
-    st.line_chart(
+    line_chart(
         inventory,
-        x="month_start",
-        y=[
-            "stockout_products",
-            "below_min_products",
-            "above_max_products",
-        ],
+        {
+            "stockout_products": "Stockout",
+            "below_min_products": "Pod minimom",
+            "above_max_products": "Nad maximom",
+        },
+        "Počet produktov",
+        tooltip_format=",.0f",
     )
 
     st.subheader("Hodnota zásob")
-    st.line_chart(
+    line_chart(
         inventory,
-        x="month_start",
-        y=[
-            "inventory_cost_value",
-            "inventory_sales_value",
-        ],
+        {
+            "inventory_cost_value": "Nákupná hodnota",
+            "inventory_sales_value": "Predajná hodnota",
+        },
+        "EUR",
     )
 
+    inventory_mapping = {
+        "month_start": "Mesiac",
+        "inventory_cost_value": "Nákupná hodnota zásob",
+        "inventory_sales_value": "Predajná hodnota zásob",
+        "stockout_products": "Stockout",
+        "below_min_products": "Pod minimom",
+        "above_max_products": "Nad maximom",
+        "healthy_products": "V zdravom pásme",
+        "average_days_of_cover": "Days of cover",
+        "days_cover_coverage_pct": "Pokrytie výpočtu",
+    }
+
     st.dataframe(
-        inventory,
+        translated_rows(
+            inventory,
+            inventory_mapping,
+            month_field="month_start",
+        ),
         use_container_width=True,
         hide_index=True,
+        column_config={
+            "Mesiac": st.column_config.TextColumn(
+                "Mesiac",
+                pinned=True,
+            ),
+            "Nákupná hodnota zásob":
+                st.column_config.NumberColumn(
+                    "Nákupná hodnota zásob",
+                    format="%,.2f €",
+                ),
+            "Predajná hodnota zásob":
+                st.column_config.NumberColumn(
+                    "Predajná hodnota zásob",
+                    format="%,.2f €",
+                ),
+            "Pokrytie výpočtu":
+                st.column_config.NumberColumn(
+                    "Pokrytie výpočtu",
+                    format="%.1f %%",
+                ),
+        },
     )
 
 
 with tabs[3]:
     st.subheader("Výkonnosť dodávateľov")
 
-    st.bar_chart(
+    horizontal_bar_chart(
         suppliers,
-        x="supplier_name",
-        y="delivered_value",
+        "supplier_name",
+        "delivered_value",
+        "Dodávateľ",
+        "Dodaná hodnota (EUR)",
+        height=max(300, len(suppliers) * 42),
     )
 
+    supplier_mapping = {
+        "supplier_name": "Dodávateľ",
+        "purchase_order_count": "Objednávky",
+        "ordered_units": "Objednané množstvo",
+        "delivered_units": "Dodané množstvo",
+        "undelivered_units": "Nedodané množstvo",
+        "delivered_value": "Dodaná hodnota",
+        "fill_rate_pct": "Fill rate",
+        "average_actual_lead_time_days": "Skutočný lead time",
+        "average_standard_lead_time_days":
+            "Štandardný lead time",
+        "within_standard_lead_time_pct":
+            "V štandardnom lead time",
+        "late_line_count": "Oneskorené položky",
+    }
+
     st.dataframe(
-        suppliers,
+        translated_rows(suppliers, supplier_mapping),
         use_container_width=True,
         hide_index=True,
-        column_order=[
-            "supplier_name",
-            "purchase_order_count",
-            "ordered_units",
-            "delivered_units",
-            "undelivered_units",
-            "delivered_value",
-            "fill_rate_pct",
-            "average_actual_lead_time_days",
-            "average_standard_lead_time_days",
-            "within_standard_lead_time_pct",
-            "late_line_count",
-        ],
+        column_config={
+            "Dodávateľ": st.column_config.TextColumn(
+                "Dodávateľ",
+                pinned=True,
+                width="large",
+            ),
+            "Dodaná hodnota": st.column_config.NumberColumn(
+                "Dodaná hodnota",
+                format="%,.2f €",
+            ),
+            "Fill rate": st.column_config.NumberColumn(
+                "Fill rate",
+                format="%.1f %%",
+            ),
+            "Skutočný lead time":
+                st.column_config.NumberColumn(
+                    "Skutočný lead time",
+                    format="%.1f dňa",
+                ),
+            "Štandardný lead time":
+                st.column_config.NumberColumn(
+                    "Štandardný lead time",
+                    format="%.1f dňa",
+                ),
+            "V štandardnom lead time":
+                st.column_config.NumberColumn(
+                    "V štandardnom lead time",
+                    format="%.1f %%",
+                ),
+        },
     )
 
     st.caption(
-        "Within standard lead time porovnáva skutočný čas "
-        "dodania s lead_time_days v kmeni produktu."
+        "Podiel v štandardnom lead time porovnáva skutočný čas "
+        "dodania s hodnotou lead_time_days v kmeni produktu."
     )
 
 
@@ -433,34 +828,70 @@ with tabs[4]:
     )
 
     st.subheader("Expedície podľa spôsobu doručenia")
-    st.line_chart(
+    line_chart(
         expeditions,
-        x="month_start",
-        y=[
-            "own_delivery_expeditions",
-            "external_delivery_expeditions",
-            "pickup_expeditions",
-        ],
+        {
+            "own_delivery_expeditions": "Vlastná doprava",
+            "external_delivery_expeditions": "Externá doprava",
+            "pickup_expeditions": "Osobný odber",
+        },
+        "Počet expedícií",
+        tooltip_format=",.0f",
     )
+
+    vehicle_mapping = {
+        "vehicle_id": "Vozidlo",
+        "driver": "Vodič",
+        "trip_count": "Jazdy",
+        "active_day_count": "Aktívne dni",
+        "transported_weight_kg": "Prepravená hmotnosť",
+        "transported_volume_m3": "Prepravený objem",
+        "average_weight_utilization_pct":
+            "Priemerné využitie hmotnosti",
+        "average_volume_utilization_pct":
+            "Priemerné využitie objemu",
+        "maximum_weight_utilization_pct":
+            "Max. využitie hmotnosti",
+        "maximum_volume_utilization_pct":
+            "Max. využitie objemu",
+        "overloaded_trips": "Preťažené jazdy",
+    }
 
     st.subheader("Využitie vozidiel")
     st.dataframe(
-        vehicles,
+        translated_rows(vehicles, vehicle_mapping),
         use_container_width=True,
         hide_index=True,
-        column_order=[
-            "vehicle_id",
-            "driver",
-            "trip_count",
-            "active_day_count",
-            "transported_weight_kg",
-            "transported_volume_m3",
-            "average_weight_utilization_pct",
-            "average_volume_utilization_pct",
-            "maximum_weight_utilization_pct",
-            "maximum_volume_utilization_pct",
-            "overloaded_trips",
-        ],
+        column_config={
+            "Vozidlo": st.column_config.TextColumn(
+                "Vozidlo",
+                pinned=True,
+            ),
+            "Vodič": st.column_config.TextColumn(
+                "Vodič",
+                width="large",
+            ),
+            "Prepravená hmotnosť":
+                st.column_config.NumberColumn(
+                    "Prepravená hmotnosť",
+                    format="%,.2f kg",
+                ),
+            "Prepravený objem":
+                st.column_config.NumberColumn(
+                    "Prepravený objem",
+                    format="%,.3f m³",
+                ),
+            "Priemerné využitie hmotnosti":
+                st.column_config.NumberColumn(
+                    "Priemerné využitie hmotnosti",
+                    format="%.1f %%",
+                ),
+            "Priemerné využitie objemu":
+                st.column_config.NumberColumn(
+                    "Priemerné využitie objemu",
+                    format="%.1f %%",
+                ),
+        },
     )
 
     st.info(
@@ -471,6 +902,7 @@ with tabs[4]:
 
 with tabs[5]:
     latest_refresh = analytics_status.get("latest_refresh") or {}
+    table_counts = analytics_status.get("table_counts") or {}
 
     status_columns = st.columns(4)
     status_columns[0].metric(
@@ -490,15 +922,63 @@ with tabs[5]:
         str(latest_refresh.get("status", "unknown")).upper(),
     )
     status_columns[3].metric(
-        "Verzia",
+        "Dashboard",
         APP_VERSION,
     )
 
-    st.subheader("Stav analytickej vrstvy")
-    st.json(analytics_status)
+    st.subheader("Počty analytických záznamov")
+    st.dataframe(
+        [
+            {
+                "Dataset": "Mesačný predaj",
+                "Počet riadkov": table_counts.get("sales_monthly"),
+            },
+            {
+                "Dataset": "Predaj produktov",
+                "Počet riadkov": table_counts.get(
+                    "product_sales_monthly"
+                ),
+            },
+            {
+                "Dataset": "Zdravie skladu",
+                "Počet riadkov": table_counts.get(
+                    "inventory_health_monthly"
+                ),
+            },
+            {
+                "Dataset": "Výkonnosť dodávateľov",
+                "Počet riadkov": table_counts.get(
+                    "procurement_supplier_monthly"
+                ),
+            },
+            {
+                "Dataset": "Expedície",
+                "Počet riadkov": table_counts.get(
+                    "expedition_monthly"
+                ),
+            },
+            {
+                "Dataset": "Využitie vozidiel",
+                "Počet riadkov": table_counts.get(
+                    "vehicle_utilization_monthly"
+                ),
+            },
+            {
+                "Dataset": "Manažérske KPI",
+                "Počet riadkov": table_counts.get(
+                    "management_kpis_monthly"
+                ),
+            },
+        ],
+        use_container_width=True,
+        hide_index=True,
+    )
 
-    st.subheader("Stav API")
-    st.json(health)
+    with st.expander("Detail posledného mart refreshu"):
+        st.json(latest_refresh)
+
+    with st.expander("Detail API a databázy"):
+        st.json(health)
 
 
 st.caption(

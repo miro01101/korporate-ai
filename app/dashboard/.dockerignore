@@ -4,3 +4,7 @@ __pycache__
 .streamlit
 .venv
 .env
+
+# Include Streamlit runtime configuration
+!.streamlit
+!.streamlit/config.toml

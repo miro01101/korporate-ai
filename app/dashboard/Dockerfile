@@ -21,6 +21,7 @@ RUN python -m pip install \
     --requirement /tmp/requirements.txt
 
 COPY app.py /app/app.py
+COPY .streamlit /app/.streamlit
 
 USER 10001:10001
 
