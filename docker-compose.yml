@@ -111,7 +111,7 @@ services:
     logging: *default-logging
 
   importer:
-    image: korporate-ai-importer:0.3.0
+    image: korporate-ai-importer:0.4.0
     build:
       context: .
       dockerfile: app/importer/Dockerfile
@@ -141,7 +141,7 @@ services:
     logging: *default-logging
 
   analytics-refresh:
-    image: korporate-ai-importer:0.3.0
+    image: korporate-ai-importer:0.4.0
     build:
       context: .
       dockerfile: app/importer/Dockerfile
@@ -183,7 +183,7 @@ services:
     logging: *default-logging
 
   analytics-validate:
-    image: korporate-ai-importer:0.3.0
+    image: korporate-ai-importer:0.4.0
     build:
       context: .
       dockerfile: app/importer/Dockerfile
