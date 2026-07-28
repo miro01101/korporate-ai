@@ -37,8 +37,10 @@ if ! docker image inspect "$IMPORTER_IMAGE" >/dev/null 2>&1; then
 fi
 
 POSTGRES_CID="$(docker compose ps -q postgres)"
-if [ -z "$POSTGRES_CID" ]; then
-  echo "CHYBA: PostgreSQL kontajner nebeží" >&2
+API_CID="$(docker compose ps -q api)"
+
+if [ -z "$POSTGRES_CID" ] || [ -z "$API_CID" ]; then
+  echo "CHYBA: PostgreSQL alebo API kontajner nebeží" >&2
   exit 2
 fi
 
@@ -55,6 +57,32 @@ if [ -z "$BACKEND_NETWORK" ]; then
   exit 2
 fi
 
+EGRESS_NETWORK=""
+
+while IFS= read -r NETWORK_NAME; do
+  [ -n "$NETWORK_NAME" ] || continue
+  [ "$NETWORK_NAME" != "$BACKEND_NETWORK" ] || continue
+
+  NETWORK_INTERNAL="$(
+    docker network inspect "$NETWORK_NAME" \
+      --format '{{.Internal}}'
+  )"
+
+  if [ "$NETWORK_INTERNAL" = "false" ]; then
+    EGRESS_NETWORK="$NETWORK_NAME"
+    break
+  fi
+done < <(
+  docker inspect "$API_CID" \
+    --format \
+    '{{range $name, $settings := .NetworkSettings.Networks}}{{println $name}}{{end}}'
+)
+
+if [ -z "$EGRESS_NETWORK" ]; then
+  echo "CHYBA: egress Docker network nebol nájdený" >&2
+  exit 2
+fi
+
 mkdir -p \
   "$IMPORT_ROOT/incoming" \
   "$IMPORT_ROOT/archive" \
@@ -63,6 +91,7 @@ mkdir -p \
 
 docker run --rm \
   --pull never \
+  --network "name=$EGRESS_NETWORK,gw-priority=1" \
   --network "$BACKEND_NETWORK" \
   --memory 1024m \
   --cpus 1.0 \

@@ -5,7 +5,10 @@ from __future__ import annotations
 
 import importlib.util
 from pathlib import Path
+from unittest import mock
 import unittest
+
+import requests
 
 
 MODULE_PATH = Path("/app/scripts/google-drive-pipeline.py")
@@ -52,6 +55,30 @@ class GoogleDrivePipelineTests(unittest.TestCase):
             MODULE.import_failure_status("connection refused", None),
             "failed",
         )
+
+    @mock.patch.object(MODULE.time, "sleep")
+    def test_transport_error_is_retried(
+        self,
+        sleep_mock: mock.Mock,
+    ) -> None:
+        response = mock.Mock()
+        response.status_code = 200
+
+        session = mock.Mock()
+        session.request.side_effect = [
+            requests.ConnectionError("dns failure"),
+            response,
+        ]
+
+        actual = MODULE.request_with_retry(
+            session,
+            "GET",
+            "https://example.test",
+        )
+
+        self.assertIs(actual, response)
+        self.assertEqual(session.request.call_count, 2)
+        sleep_mock.assert_called_once_with(1)
 
 
 if __name__ == "__main__":

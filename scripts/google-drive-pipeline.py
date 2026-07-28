@@ -15,9 +15,11 @@ from typing import Any
 from urllib.parse import quote
 import uuid
 
+from google.auth.exceptions import TransportError
 from google.auth.transport.requests import AuthorizedSession
 from google.oauth2 import service_account
 import psycopg
+import requests
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
@@ -114,18 +116,71 @@ def drive_session(credentials_path: Path) -> AuthorizedSession:
 
 
 def request_with_retry(
-    session: AuthorizedSession, method: str, url: str, **kwargs: Any
+    session: AuthorizedSession,
+    method: str,
+    url: str,
+    **kwargs: Any,
 ):
     response = None
+    last_error: Exception | None = None
+
     for attempt in range(1, 4):
-        response = session.request(method, url, timeout=(10, 120), **kwargs)
+        try:
+            response = session.request(
+                method,
+                url,
+                timeout=(10, 120),
+                **kwargs,
+            )
+        except (
+            requests.RequestException,
+            TransportError,
+        ) as exc:
+            last_error = exc
+
+            if attempt == 3:
+                raise RuntimeError(
+                    "HTTP request failed after "
+                    f"{attempt} attempts: {exc}"
+                ) from exc
+
+            wait_seconds = 2 ** (attempt - 1)
+
+            print(
+                "HTTP_RETRY="
+                f"{attempt} "
+                f"WAIT_SECONDS={wait_seconds} "
+                f"ERROR={type(exc).__name__}"
+            )
+
+            time.sleep(wait_seconds)
+            continue
+
         if response.status_code not in RETRYABLE_HTTP:
             return response
+
         if attempt < 3:
+            status_code = response.status_code
             response.close()
-            time.sleep(2 ** (attempt - 1))
-    assert response is not None
-    return response
+
+            wait_seconds = 2 ** (attempt - 1)
+
+            print(
+                "HTTP_RETRY="
+                f"{attempt} "
+                f"WAIT_SECONDS={wait_seconds} "
+                f"STATUS={status_code}"
+            )
+
+            time.sleep(wait_seconds)
+
+    if response is not None:
+        return response
+
+    raise RuntimeError(
+        "HTTP request failed without response: "
+        f"{last_error}"
+    )
 
 
 def list_xlsx(
