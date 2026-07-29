@@ -38,6 +38,8 @@ OVERALL_COVERAGE_GATE = 0.78
 HORIZON_COVERAGE_GATE = 0.75
 CELL_COVERAGE_GATE = 0.70
 
+AGGREGATE_METRIC_HORIZON = 1
+
 BASELINE_FAMILY = "baseline_ensemble"
 LIGHTGBM_FAMILY = "global_lightgbm_quantile"
 
@@ -1092,7 +1094,7 @@ def run_interval_calibration(
         [
             {
                 "model_name": MODEL_FAMILY,
-                "horizon": 0,
+                "horizon": AGGREGATE_METRIC_HORIZON,
                 "metric_name": (
                     "holdout_coverage_overall"
                 ),
@@ -1106,7 +1108,7 @@ def run_interval_calibration(
             },
             {
                 "model_name": MODEL_FAMILY,
-                "horizon": 0,
+                "horizon": AGGREGATE_METRIC_HORIZON,
                 "metric_name": (
                     "minimum_horizon_coverage"
                 ),
@@ -1120,7 +1122,7 @@ def run_interval_calibration(
             },
             {
                 "model_name": MODEL_FAMILY,
-                "horizon": 0,
+                "horizon": AGGREGATE_METRIC_HORIZON,
                 "metric_name": (
                     "minimum_cell_coverage"
                 ),
@@ -1134,7 +1136,7 @@ def run_interval_calibration(
             },
             {
                 "model_name": MODEL_FAMILY,
-                "horizon": 0,
+                "horizon": AGGREGATE_METRIC_HORIZON,
                 "metric_name": (
                     "inventory_risk_ready"
                 ),

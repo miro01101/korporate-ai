@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 
 from ml_pipeline.interval_calibration import (
+    AGGREGATE_METRIC_HORIZON,
     apply_qhat,
     finite_sample_qhat,
     readiness_decision,
@@ -13,6 +14,14 @@ from ml_pipeline.interval_calibration import (
 
 
 class IntervalCalibrationTests(unittest.TestCase):
+    def test_aggregate_metric_horizon_respects_schema(
+        self,
+    ) -> None:
+        self.assertGreaterEqual(
+            AGGREGATE_METRIC_HORIZON,
+            1,
+        )
+
     def test_qhat_is_nonnegative(self) -> None:
         scores = np.asarray(
             [-2.0, -1.0, 0.0, 1.0, 3.0]
