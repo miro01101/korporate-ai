@@ -248,6 +248,7 @@ services:
       OPENBLAS_NUM_THREADS: "2"
       MKL_NUM_THREADS: "2"
       NUMEXPR_NUM_THREADS: "2"
+      ML_ARTIFACT_DIR: /artifacts
 
     secrets:
       - postgres_app_password
@@ -257,6 +258,9 @@ services:
     # supplementary read-only secret group.
     group_add:
       - "10001"
+
+    volumes:
+      - /srv/korporate-ai/ml-artifacts:/artifacts
 
     depends_on:
       postgres:

@@ -33,6 +33,9 @@ from ml_pipeline.quality import (
     validate_source_frames,
 )
 from ml_pipeline.demand import run_demand_training
+from ml_pipeline.lightgbm_challenger import (
+    run_lightgbm_training,
+)
 
 
 def git_commit() -> str | None:
@@ -550,6 +553,93 @@ def train_demand_command() -> int:
     return 0
 
 
+def train_lightgbm_command() -> int:
+    config = DatabaseConfig.from_environment()
+
+    artifact_root = Path(
+        os.getenv(
+            "ML_ARTIFACT_DIR",
+            "/artifacts",
+        )
+    )
+
+    with database_connection(config) as connection:
+        summary = run_lightgbm_training(
+            connection,
+            code_commit=git_commit(),
+            artifact_root=artifact_root,
+        )
+
+    print(f"model_run_id={summary.model_run_id}")
+    print(
+        f"feature_run_id={summary.feature_run_id}"
+    )
+    print(
+        f"baseline_run_id={summary.baseline_run_id}"
+    )
+    print(
+        f"training_cutoff={summary.training_cutoff}"
+    )
+    print(
+        f"challenger_product_count="
+        f"{summary.product_count}"
+    )
+    print(
+        f"challenger_forecast_count="
+        f"{summary.forecast_count}"
+    )
+    print(
+        f"challenger_metric_count="
+        f"{summary.metric_count}"
+    )
+    print(
+        f"training_row_count="
+        f"{summary.training_row_count}"
+    )
+    print(
+        f"backtest_row_count="
+        f"{summary.backtest_row_count}"
+    )
+    print(
+        f"raw_quantile_crossing_rate="
+        f"{summary.raw_crossing_rate}"
+    )
+    print(
+        f"baseline_median_wape="
+        f"{summary.baseline_median_wape}"
+    )
+    print(
+        f"challenger_median_wape="
+        f"{summary.challenger_median_wape}"
+    )
+    print(
+        f"comparable_product_count="
+        f"{summary.comparable_product_count}"
+    )
+    print(
+        f"improved_product_count="
+        f"{summary.improved_product_count}"
+    )
+    print(
+        "promotion_recommended="
+        + (
+            "ANO"
+            if summary.promotion_recommended
+            else "NIE"
+        )
+    )
+    print(
+        f"artifact_path={summary.artifact_path}"
+    )
+    print(
+        f"artifact_sha256="
+        f"{summary.artifact_sha256}"
+    )
+    print("ML_LIGHTGBM_TRAINING=PASS")
+
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
@@ -566,6 +656,7 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("validate")
     subparsers.add_parser("build-features")
     subparsers.add_parser("train-demand")
+    subparsers.add_parser("train-lightgbm")
 
     return parser
 
@@ -585,6 +676,9 @@ def main() -> int:
 
     if args.command == "train-demand":
         return train_demand_command()
+
+    if args.command == "train-lightgbm":
+        return train_lightgbm_command()
 
     parser.error(f"Unknown command: {args.command}")
     return 2
