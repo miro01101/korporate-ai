@@ -287,7 +287,7 @@ services:
     logging: *default-logging
 
   dashboard:
-    image: korporate-ai-dashboard:0.3.1
+    image: korporate-ai-dashboard:0.4.0
     build:
       context: ./app/dashboard
 
@@ -297,13 +297,22 @@ services:
     environment:
       APP_NAME: Korporate AI Logistics Platform
       APP_ENV: production
-      APP_VERSION: 0.3.1
+      APP_VERSION: 0.4.0
+      DASHBOARD_AUTH_FILE: /run/secrets/dashboard_auth.json
       API_BASE_URL: http://api:8000
       HOME: /tmp
 
     depends_on:
       api:
         condition: service_healthy
+
+    volumes:
+      - type: bind
+        source: /opt/korporate-ai/secrets/dashboard_auth.json
+        target: /run/secrets/dashboard_auth.json
+        read_only: true
+        bind:
+          create_host_path: false
 
     ports:
       - "127.0.0.1:18501:8501"

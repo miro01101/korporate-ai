@@ -5,14 +5,169 @@ from typing import Any
 import httpx
 import streamlit as st
 
+import hmac
+import json
+from pathlib import Path
+
+from argon2 import PasswordHasher
+from argon2.exceptions import InvalidHashError, VerificationError
+
 
 APP_NAME = os.getenv(
     "APP_NAME",
     "Korporate AI Logistics Platform",
 )
-APP_VERSION = os.getenv("APP_VERSION", "0.3.1")
+APP_VERSION = os.getenv("APP_VERSION", "0.4.0")
 APP_ENV = os.getenv("APP_ENV", "production")
 API_BASE_URL = os.getenv("API_BASE_URL", "http://api:8000")
+
+
+DASHBOARD_AUTH_FILE = Path(
+    os.getenv(
+        "DASHBOARD_AUTH_FILE",
+        "/run/secrets/dashboard_auth.json",
+    )
+)
+
+PASSWORD_HASHER = PasswordHasher()
+
+
+def load_dashboard_auth_config() -> tuple[str, str]:
+    try:
+        payload = json.loads(
+            DASHBOARD_AUTH_FILE.read_text(encoding="utf-8")
+        )
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError(
+            "Dashboard authentication configuration is unavailable."
+        ) from exc
+
+    if not isinstance(payload, dict):
+        raise RuntimeError(
+            "Dashboard authentication configuration is invalid."
+        )
+
+    email = str(payload.get("email", "")).strip().lower()
+    password_hash = str(
+        payload.get("password_hash", "")
+    ).strip()
+
+    if not email or not password_hash.startswith("$argon2"):
+        raise RuntimeError(
+            "Dashboard authentication configuration is invalid."
+        )
+
+    return email, password_hash
+
+
+def verify_dashboard_credentials(
+    submitted_email: str,
+    submitted_password: str,
+    expected_email: str,
+    password_hash: str,
+) -> bool:
+    normalized_email = submitted_email.strip().lower()
+
+    email_matches = hmac.compare_digest(
+        normalized_email,
+        expected_email,
+    )
+
+    try:
+        password_matches = PASSWORD_HASHER.verify(
+            password_hash,
+            submitted_password,
+        )
+    except (VerificationError, InvalidHashError):
+        password_matches = False
+
+    return email_matches and password_matches
+
+
+def require_dashboard_auth() -> None:
+    if st.session_state.get(
+        "dashboard_authenticated"
+    ) is True:
+        authenticated_email = st.session_state.get(
+            "dashboard_email",
+            "",
+        )
+
+        with st.sidebar:
+            st.caption(
+                f"Prihlásený používateľ: {authenticated_email}"
+            )
+
+            if st.button(
+                "Odhlásiť",
+                key="dashboard_logout",
+                use_container_width=True,
+            ):
+                st.session_state.pop(
+                    "dashboard_authenticated",
+                    None,
+                )
+                st.session_state.pop(
+                    "dashboard_email",
+                    None,
+                )
+                st.rerun()
+
+        return
+
+    try:
+        expected_email, password_hash = (
+            load_dashboard_auth_config()
+        )
+    except RuntimeError:
+        st.error(
+            "Prihlasovanie nie je správne nakonfigurované."
+        )
+        st.stop()
+
+    st.title("Prihlásenie")
+    st.caption(APP_NAME)
+
+    with st.form(
+        "dashboard_login",
+        clear_on_submit=True,
+    ):
+        submitted_email = st.text_input(
+            "Email",
+            key="dashboard_login_email",
+        )
+
+        submitted_password = st.text_input(
+            "Heslo",
+            type="password",
+            key="dashboard_login_password",
+        )
+
+        submitted = st.form_submit_button(
+            "Prihlásiť",
+            use_container_width=True,
+        )
+
+    if submitted:
+        if verify_dashboard_credentials(
+            submitted_email,
+            submitted_password,
+            expected_email,
+            password_hash,
+        ):
+            st.session_state[
+                "dashboard_authenticated"
+            ] = True
+
+            st.session_state[
+                "dashboard_email"
+            ] = expected_email
+
+            st.rerun()
+
+        st.error("Nesprávny email alebo heslo.")
+
+    st.stop()
 
 
 st.set_page_config(
@@ -21,6 +176,8 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+require_dashboard_auth()
 
 st.markdown(
     """
