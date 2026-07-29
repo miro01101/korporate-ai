@@ -40,6 +40,9 @@ from ml_pipeline.lightgbm_challenger import (
 from ml_pipeline.hybrid_champion import (
     run_hybrid_selection,
 )
+from ml_pipeline.interval_calibration import (
+    run_interval_calibration,
+)
 
 
 def git_commit() -> str | None:
@@ -705,6 +708,72 @@ def select_hybrid_command() -> int:
     return 0
 
 
+def calibrate_intervals_command() -> int:
+    config = DatabaseConfig.from_environment()
+
+    with database_connection(config) as connection:
+        summary = run_interval_calibration(
+            connection,
+            code_commit=git_commit(),
+        )
+
+    print(f"model_run_id={summary.model_run_id}")
+    print(
+        f"feature_run_id={summary.feature_run_id}"
+    )
+    print(
+        f"parent_hybrid_run_id="
+        f"{summary.parent_hybrid_run_id}"
+    )
+    print(
+        f"calibrated_forecast_count="
+        f"{summary.forecast_count}"
+    )
+    print(
+        f"calibration_metric_count="
+        f"{summary.metric_count}"
+    )
+    print(
+        f"calibration_prediction_count="
+        f"{summary.calibration_prediction_count}"
+    )
+    print(
+        f"holdout_prediction_count="
+        f"{summary.holdout_prediction_count}"
+    )
+    print(
+        f"overall_holdout_coverage="
+        f"{summary.overall_holdout_coverage}"
+    )
+    print(
+        f"minimum_horizon_coverage="
+        f"{summary.minimum_horizon_coverage}"
+    )
+    print(
+        f"minimum_cell_coverage="
+        f"{summary.minimum_cell_coverage}"
+    )
+    print(
+        "inventory_risk_ready="
+        + (
+            "ANO"
+            if summary.inventory_risk_ready
+            else "NIE"
+        )
+    )
+    print(
+        "calibration_origins="
+        + ",".join(summary.calibration_origins)
+    )
+    print(
+        "holdout_origins="
+        + ",".join(summary.holdout_origins)
+    )
+    print("ML_INTERVAL_CALIBRATION=PASS")
+
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
@@ -723,6 +792,7 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("train-demand")
     subparsers.add_parser("train-lightgbm")
     subparsers.add_parser("select-hybrid")
+    subparsers.add_parser("calibrate-intervals")
 
     return parser
 
@@ -748,6 +818,9 @@ def main() -> int:
 
     if args.command == "select-hybrid":
         return select_hybrid_command()
+
+    if args.command == "calibrate-intervals":
+        return calibrate_intervals_command()
 
     parser.error(f"Unknown command: {args.command}")
     return 2
