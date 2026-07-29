@@ -252,6 +252,12 @@ services:
     secrets:
       - postgres_app_password
 
+    # The DB secret is owned by root:10001 with mode 0440.
+    # ML runs as UID/GID 10002 and receives only the
+    # supplementary read-only secret group.
+    group_add:
+      - "10001"
+
     depends_on:
       postgres:
         condition: service_healthy
