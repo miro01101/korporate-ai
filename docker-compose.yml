@@ -224,6 +224,57 @@ services:
 
     logging: *default-logging
 
+
+  ml:
+    image: korporate-ai-ml:0.5.0
+    build:
+      context: .
+      dockerfile: app/ml/Dockerfile
+
+    profiles:
+      - tools
+
+    restart: "no"
+    init: true
+
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: korporate_ai
+      DB_USER: korporate_app
+      DB_PASSWORD_FILE: /run/secrets/postgres_app_password
+
+      OMP_NUM_THREADS: "2"
+      OPENBLAS_NUM_THREADS: "2"
+      MKL_NUM_THREADS: "2"
+      NUMEXPR_NUM_THREADS: "2"
+
+    secrets:
+      - postgres_app_password
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    command:
+      - self-check
+
+    mem_limit: 1400m
+    mem_reservation: 512m
+    cpus: 1.25
+    pids_limit: 180
+
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+
+    networks:
+      - backend
+
+    logging: *default-logging
+
   api:
     image: korporate-ai-backend:0.4.0
     build:
