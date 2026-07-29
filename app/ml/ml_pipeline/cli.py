@@ -37,6 +37,9 @@ from ml_pipeline.demand import run_demand_training
 from ml_pipeline.lightgbm_challenger import (
     run_lightgbm_training,
 )
+from ml_pipeline.hybrid_champion import (
+    run_hybrid_selection,
+)
 
 
 def git_commit() -> str | None:
@@ -641,6 +644,67 @@ def train_lightgbm_command() -> int:
     return 0
 
 
+def select_hybrid_command() -> int:
+    config = DatabaseConfig.from_environment()
+
+    with database_connection(config) as connection:
+        summary = run_hybrid_selection(
+            connection,
+            code_commit=git_commit(),
+        )
+
+    print(f"model_run_id={summary.model_run_id}")
+    print(
+        f"feature_run_id={summary.feature_run_id}"
+    )
+    print(
+        f"baseline_run_id={summary.baseline_run_id}"
+    )
+    print(
+        f"challenger_run_id="
+        f"{summary.challenger_run_id}"
+    )
+    print(
+        f"hybrid_product_count="
+        f"{summary.product_count}"
+    )
+    print(
+        f"baseline_product_count="
+        f"{summary.baseline_product_count}"
+    )
+    print(
+        f"lightgbm_product_count="
+        f"{summary.lightgbm_product_count}"
+    )
+    print(
+        f"cold_start_product_count="
+        f"{summary.cold_start_product_count}"
+    )
+    print(
+        f"hybrid_forecast_count="
+        f"{summary.forecast_count}"
+    )
+    print(
+        f"hybrid_metric_count="
+        f"{summary.metric_count}"
+    )
+    print(
+        f"baseline_median_wape="
+        f"{summary.baseline_median_wape}"
+    )
+    print(
+        f"hybrid_median_wape="
+        f"{summary.hybrid_median_wape}"
+    )
+    print(
+        f"selection_margin="
+        f"{summary.selection_margin}"
+    )
+    print("ML_HYBRID_SELECTION=PASS")
+
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
@@ -658,6 +722,7 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("build-features")
     subparsers.add_parser("train-demand")
     subparsers.add_parser("train-lightgbm")
+    subparsers.add_parser("select-hybrid")
 
     return parser
 
@@ -680,6 +745,9 @@ def main() -> int:
 
     if args.command == "train-lightgbm":
         return train_lightgbm_command()
+
+    if args.command == "select-hybrid":
+        return select_hybrid_command()
 
     parser.error(f"Unknown command: {args.command}")
     return 2
