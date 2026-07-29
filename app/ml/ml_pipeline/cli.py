@@ -32,6 +32,7 @@ from ml_pipeline.quality import (
     QualityIssue,
     validate_source_frames,
 )
+from ml_pipeline.demand import run_demand_training
 
 
 def git_commit() -> str | None:
@@ -505,6 +506,50 @@ def build_features_command() -> int:
     return 0
 
 
+def train_demand_command() -> int:
+    config = DatabaseConfig.from_environment()
+
+    with database_connection(config) as connection:
+        summary = run_demand_training(
+            connection,
+            code_commit=git_commit(),
+        )
+
+    print(f"model_run_id={summary.model_run_id}")
+    print(f"feature_run_id={summary.feature_run_id}")
+    print(
+        f"training_cutoff={summary.training_cutoff}"
+    )
+    print(
+        f"demand_product_count={summary.product_count}"
+    )
+    print(
+        f"demand_forecast_count={summary.forecast_count}"
+    )
+    print(
+        f"demand_metric_count={summary.metric_count}"
+    )
+    print(
+        "selected_model_counts="
+        + json.dumps(
+            summary.selected_model_counts,
+            sort_keys=True,
+        )
+    )
+    print(
+        "median_selected_wape="
+        + (
+            str(summary.median_selected_wape)
+            if summary.median_selected_wape
+            is not None
+            else "null"
+        )
+    )
+    print("ML_DEMAND_TRAINING=PASS")
+
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
@@ -520,6 +565,7 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("self-check")
     subparsers.add_parser("validate")
     subparsers.add_parser("build-features")
+    subparsers.add_parser("train-demand")
 
     return parser
 
@@ -536,6 +582,9 @@ def main() -> int:
 
     if args.command == "build-features":
         return build_features_command()
+
+    if args.command == "train-demand":
+        return train_demand_command()
 
     parser.error(f"Unknown command: {args.command}")
     return 2
