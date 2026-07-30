@@ -115,6 +115,25 @@ class RecommendationEngineTests(unittest.TestCase):
         ):
             build_recommendations(frame)
 
+    def test_build_preserves_as_of_date_for_summary(self) -> None:
+        rows = [
+            self.row(
+                product_id=f"P-{index:03d}",
+            ).to_dict()
+            for index in range(80)
+        ]
+
+        output = build_recommendations(
+            pd.DataFrame(rows)
+        )
+
+        self.assertIn("as_of_date", output.columns)
+        self.assertEqual(output["as_of_date"].nunique(), 1)
+        self.assertEqual(
+            output.iloc[0]["as_of_date"],
+            date(2025, 12, 1),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

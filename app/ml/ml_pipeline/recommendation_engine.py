@@ -320,6 +320,7 @@ def build_recommendations(context: pd.DataFrame) -> pd.DataFrame:
                 ),
                 "model_run_id": model_run_id,
                 "product_id": str(row["product_id"]),
+                "as_of_date": row["as_of_date"],
                 "recommendation_type": recommendation_type,
                 "priority": recommendation_priority(
                     recommendation_type,
