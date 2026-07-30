@@ -50,6 +50,10 @@ from ml_pipeline.inventory_risk import (
     RISK_ENGINE_VERSION,
     run_inventory_risk,
 )
+from ml_pipeline.recommendation_engine import (
+    POLICY_VERSION as RECOMMENDATION_POLICY_VERSION,
+    run_recommendation_engine,
+)
 
 
 def git_commit() -> str | None:
@@ -819,6 +823,37 @@ def build_inventory_risk_command() -> int:
     return 0
 
 
+def build_recommendations_command() -> int:
+    config = DatabaseConfig.from_environment()
+
+    with database_connection(config) as connection:
+        summary = run_recommendation_engine(connection)
+
+    print(
+        "recommendation_policy_version="
+        f"{RECOMMENDATION_POLICY_VERSION}"
+    )
+    print(f"model_run_id={summary.model_run_id}")
+    print(f"as_of_date={summary.as_of_date}")
+    print(
+        "recommendation_product_count="
+        f"{summary.product_count}"
+    )
+    print(f"recommendation_row_count={summary.row_count}")
+    print(f"pending_count={summary.pending_count}")
+    print(
+        "recommendation_type_counts="
+        + json.dumps(summary.type_counts, sort_keys=True)
+    )
+    print(
+        "recommended_quantity="
+        f"{summary.recommended_quantity}"
+    )
+    print("ML_RECOMMENDATIONS=PASS")
+
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
@@ -839,6 +874,7 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("select-hybrid")
     subparsers.add_parser("calibrate-intervals")
     subparsers.add_parser("build-inventory-risk")
+    subparsers.add_parser("build-recommendations")
 
     return parser
 
@@ -870,6 +906,9 @@ def main() -> int:
 
     if args.command == "build-inventory-risk":
         return build_inventory_risk_command()
+
+    if args.command == "build-recommendations":
+        return build_recommendations_command()
 
     parser.error(f"Unknown command: {args.command}")
     return 2
