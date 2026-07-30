@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date
+import inspect
 import unittest
 from uuid import uuid4
 
@@ -10,10 +11,27 @@ from ml_pipeline.inventory_risk import (
     build_inventory_risk_frame,
     quantile_cdf_proxy,
     round_up_to_moq,
+    run_inventory_risk,
 )
 
 
 class InventoryRiskTests(unittest.TestCase):
+    def test_psycopg_sql_modulo_is_escaped(
+        self,
+    ) -> None:
+        source = inspect.getsource(
+            run_inventory_risk
+        )
+
+        self.assertEqual(
+            source.count("%% products.minimum_order_quantity"),
+            1,
+        )
+        self.assertNotIn(
+            "\n                           % products.minimum_order_quantity",
+            source,
+        )
+
     def _frames(
         self,
         *,

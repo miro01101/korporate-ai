@@ -698,7 +698,7 @@ def run_inventory_risk(connection: Connection[Any]) -> InventoryRiskSummary:
                   AND (
                         products.minimum_order_quantity <= 0
                         OR risk.recommended_order_quantity
-                           % products.minimum_order_quantity <> 0
+                           %% products.minimum_order_quantity <> 0
                       )
                 """,
                 (model_run_id, as_of_date),
