@@ -43,6 +43,13 @@ from ml_pipeline.hybrid_champion import (
 from ml_pipeline.interval_calibration import (
     run_interval_calibration,
 )
+from ml_pipeline.inventory_risk import (
+    CUMULATIVE_QUANTILE_METHOD,
+    INCOMING_POLICY,
+    PROBABILITY_METHOD,
+    RISK_ENGINE_VERSION,
+    run_inventory_risk,
+)
 
 
 def git_commit() -> str | None:
@@ -774,6 +781,44 @@ def calibrate_intervals_command() -> int:
     return 0
 
 
+def build_inventory_risk_command() -> int:
+    config = DatabaseConfig.from_environment()
+
+    with database_connection(config) as connection:
+        summary = run_inventory_risk(connection)
+
+    print(f"risk_engine_version={RISK_ENGINE_VERSION}")
+    print(f"probability_method={PROBABILITY_METHOD}")
+    print(
+        "cumulative_quantile_method="
+        f"{CUMULATIVE_QUANTILE_METHOD}"
+    )
+    print(f"incoming_policy={INCOMING_POLICY}")
+    print(f"model_run_id={summary.model_run_id}")
+    print(f"as_of_date={summary.as_of_date}")
+    print(f"inventory_risk_product_count={summary.product_count}")
+    print(f"inventory_risk_row_count={summary.row_count}")
+    print(
+        "incoming_product_count="
+        f"{summary.incoming_product_count}"
+    )
+    print(
+        "recommended_product_count="
+        f"{summary.recommended_product_count}"
+    )
+    print(
+        "total_incoming_quantity="
+        f"{summary.total_incoming_quantity}"
+    )
+    print(
+        "total_recommended_quantity="
+        f"{summary.total_recommended_quantity}"
+    )
+    print("ML_INVENTORY_RISK=PASS")
+
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
@@ -793,6 +838,7 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("train-lightgbm")
     subparsers.add_parser("select-hybrid")
     subparsers.add_parser("calibrate-intervals")
+    subparsers.add_parser("build-inventory-risk")
 
     return parser
 
@@ -821,6 +867,9 @@ def main() -> int:
 
     if args.command == "calibrate-intervals":
         return calibrate_intervals_command()
+
+    if args.command == "build-inventory-risk":
+        return build_inventory_risk_command()
 
     parser.error(f"Unknown command: {args.command}")
     return 2
