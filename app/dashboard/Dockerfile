@@ -21,6 +21,8 @@ RUN python -m pip install \
     --requirement /tmp/requirements.txt
 
 COPY app.py /app/app.py
+COPY ml_dashboard.py /app/ml_dashboard.py
+COPY tests /app/tests
 COPY .streamlit /app/.streamlit
 
 USER 10001:10001

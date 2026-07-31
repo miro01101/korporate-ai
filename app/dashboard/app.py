@@ -5,6 +5,8 @@ from typing import Any
 import httpx
 import streamlit as st
 
+from ml_dashboard import render_ml_dashboard
+
 import hmac
 import json
 from pathlib import Path
@@ -17,7 +19,7 @@ APP_NAME = os.getenv(
     "APP_NAME",
     "Korporate AI Logistics Platform",
 )
-APP_VERSION = os.getenv("APP_VERSION", "0.4.0")
+APP_VERSION = os.getenv("APP_VERSION", "0.5.0")
 APP_ENV = os.getenv("APP_ENV", "production")
 API_BASE_URL = os.getenv("API_BASE_URL", "http://api:8000")
 
@@ -446,7 +448,7 @@ def horizontal_bar_chart(
 st.title(APP_NAME)
 st.caption(
     f"Manažérsky dashboard {APP_VERSION} · "
-    f"analytické jadro 0.3.0 · prostredie: {APP_ENV}"
+    f"analytické a ML jadro 0.5.0 · prostredie: {APP_ENV}"
 )
 
 try:
@@ -627,6 +629,7 @@ tabs = st.tabs(
         "Nákup",
         "Logistika",
         "Technický stav",
+        "ML jadro",
     ]
 )
 
@@ -1136,6 +1139,10 @@ with tabs[5]:
 
     with st.expander("Detail API a databázy"):
         st.json(health)
+
+
+with tabs[6]:
+    render_ml_dashboard(api_get)
 
 
 st.caption(
