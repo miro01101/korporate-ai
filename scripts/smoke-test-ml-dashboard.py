@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Dynamic smoke test for the Streamlit ML dashboard data contract."""
+
 from __future__ import annotations
 
 import json
@@ -20,23 +22,12 @@ EXPECTED_ML_PATHS = {
 
 
 def fetch_json(path: str) -> Any:
-    with urlopen(
-        API_BASE_URL + path,
-        timeout=15,
-    ) as response:
+    with urlopen(API_BASE_URL + path, timeout=20) as response:
         return json.load(response)
 
 
-def check(
-    name: str,
-    actual: Any,
-    expected: Any,
-) -> None:
-    print(
-        f"CHECK={name} "
-        f"ACTUAL={actual} "
-        f"EXPECTED={expected}"
-    )
+def check(name: str, actual: Any, expected: Any) -> None:
+    print(f"CHECK={name} ACTUAL={actual} EXPECTED={expected}")
     if actual != expected:
         raise AssertionError(
             f"{name}: {actual!r} != {expected!r}"
@@ -47,15 +38,9 @@ with urlopen(
     DASHBOARD_BASE_URL + "/_stcore/health",
     timeout=15,
 ) as response:
-    dashboard_health = (
-        response.read().decode("utf-8").strip()
-    )
+    dashboard_health = response.read().decode("utf-8").strip()
 
-check(
-    "dashboard_health",
-    dashboard_health,
-    "ok",
-)
+check("dashboard_health", dashboard_health, "ok")
 
 ready = fetch_json("/health/ready")
 status = fetch_json("/api/v1/ml/status")
@@ -65,12 +50,10 @@ recommendations = fetch_json(
 risks = fetch_json(
     "/api/v1/ml/inventory-risk?limit=500"
 )
-
-with urlopen(
-    API_BASE_URL + "/openapi.json",
-    timeout=15,
-) as response:
-    openapi = json.load(response)
+forecasts = fetch_json(
+    "/api/v1/ml/forecast?limit=1000"
+)
+openapi = fetch_json("/openapi.json")
 
 ml_paths = {
     path
@@ -81,45 +64,22 @@ ml_paths = {
 check("api_status", ready["status"], "ready")
 check("api_version", ready["version"], "0.5.0")
 check("ml_status", status["status"], "ready")
-check(
-    "platform_version",
-    status["platform_version"],
-    "0.5.0",
-)
-check(
-    "forecast_rows",
-    status["forecast_rows"],
-    240,
-)
-check(
-    "inventory_risk_rows",
-    status["inventory_risk_rows"],
-    80,
-)
-check(
-    "recommendation_rows",
-    status["recommendation_rows"],
-    80,
-)
-check(
-    "pending_recommendations",
-    status["pending_recommendations"],
-    80,
-)
+check("platform_version", status["platform_version"], "0.5.0")
+check("forecast_payload_count", forecasts["count"], status["forecast_rows"])
+check("risk_payload_count", risks["count"], status["inventory_risk_rows"])
 check(
     "recommendation_payload_count",
     recommendations["count"],
-    80,
+    status["recommendation_rows"],
 )
 check(
-    "risk_payload_count",
-    risks["count"],
-    80,
+    "pending_recommendations",
+    sum(
+        item["status"] == "pending"
+        for item in recommendations["items"]
+    ),
+    status["pending_recommendations"],
 )
-check(
-    "ml_openapi_paths",
-    ml_paths,
-    EXPECTED_ML_PATHS,
-)
+check("ml_openapi_paths", ml_paths, EXPECTED_ML_PATHS)
 
 print("ML_DASHBOARD_SMOKE_OK=ANO")

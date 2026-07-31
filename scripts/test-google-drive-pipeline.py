@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import importlib.util
 from pathlib import Path
+import sys
 from unittest import mock
 import unittest
 
@@ -55,6 +56,23 @@ class GoogleDrivePipelineTests(unittest.TestCase):
             MODULE.import_failure_status("connection refused", None),
             "failed",
         )
+
+    def test_defer_completion_argument(self) -> None:
+        argv = [
+            "google-drive-pipeline.py",
+            "--service-account-file",
+            "/tmp/service.json",
+            "--folder-id-file",
+            "/tmp/folder-id",
+            "--import-root",
+            "/tmp/imports",
+            "--db-password-file",
+            "/tmp/db-password",
+            "--defer-completion",
+        ]
+        with mock.patch.object(sys, "argv", argv):
+            args = MODULE.parse_args()
+        self.assertTrue(args.defer_completion)
 
     @mock.patch.object(MODULE.time, "sleep")
     def test_transport_error_is_retried(

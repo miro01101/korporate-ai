@@ -39,6 +39,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--folder-id-file", type=Path, required=True)
     parser.add_argument("--import-root", type=Path, required=True)
     parser.add_argument("--max-attempts", type=int, default=3)
+    parser.add_argument(
+        "--defer-completion",
+        action="store_true",
+        help=(
+            "Po úspešnom importe a mart refreshi ponechá audit run "
+            "v stave running pre hostiteľský ML orchestrátor."
+        ),
+    )
     parser.add_argument("--created-by", default="google-drive-service-account")
     parser.add_argument("--db-host", default="postgres")
     parser.add_argument("--db-port", type=int, default=5432)
@@ -371,6 +379,43 @@ def finish_run(
             raise RuntimeError(f"Run {run_id} sa neaktualizoval.")
 
 
+def mark_ready_for_ml(
+    connection: psycopg.Connection,
+    run_id: uuid.UUID,
+    *,
+    sha256: str,
+    batch_id: uuid.UUID,
+    refresh_id: uuid.UUID,
+    metadata: dict[str, Any],
+) -> None:
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            UPDATE audit.pipeline_runs
+            SET source_sha256 = COALESCE(%s, source_sha256),
+                import_batch_id = COALESCE(%s, import_batch_id),
+                mart_refresh_run_id = COALESCE(%s, mart_refresh_run_id),
+                error_stage = NULL,
+                error_message = NULL,
+                metadata = metadata || %s
+            WHERE id = %s
+              AND status = 'running'
+              AND finished_at IS NULL
+            """,
+            (
+                sha256,
+                batch_id,
+                refresh_id,
+                Jsonb(metadata),
+                run_id,
+            ),
+        )
+        if cursor.rowcount != 1:
+            raise RuntimeError(
+                f"Run {run_id} sa nepripravil pre ML orchestráciu."
+            )
+
+
 def record_poll(
     connection: psycopg.Connection,
     status: str,
@@ -626,6 +671,33 @@ def process_file(
             print("PIPELINE_STATUS=failed")
             return False
 
+        completion_metadata = {
+            "archive_path": batch["archive_path"],
+            "transactional_mart_validation": True,
+        }
+
+        if args.defer_completion:
+            mark_ready_for_ml(
+                connection,
+                run_id,
+                sha256=sha256,
+                batch_id=batch_id,
+                refresh_id=refresh_id,
+                metadata={
+                    **completion_metadata,
+                    "ml": {
+                        "status": "pending",
+                        "automatic_ordering": False,
+                        "human_approval_required": True,
+                    },
+                },
+            )
+            print(f"IMPORT_BATCH_ID={batch_id}")
+            print(f"MART_REFRESH_RUN_ID={refresh_id}")
+            print("PIPELINE_STATUS=ready_for_ml")
+            print("GOOGLE_DRIVE_IMPORT_MART_OK=ANO")
+            return True
+
         finish_run(
             connection,
             run_id,
@@ -633,10 +705,7 @@ def process_file(
             sha256=sha256,
             batch_id=batch_id,
             refresh_id=refresh_id,
-            metadata={
-                "archive_path": batch["archive_path"],
-                "transactional_mart_validation": True,
-            },
+            metadata=completion_metadata,
         )
         print(f"IMPORT_BATCH_ID={batch_id}")
         print(f"MART_REFRESH_RUN_ID={refresh_id}")

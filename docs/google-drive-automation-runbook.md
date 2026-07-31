@@ -67,3 +67,34 @@ Ručný test emailu:
       --body-file "$BODY_FILE"
 
     rm -f "$BODY_FILE"
+
+
+## ML orchestration
+
+Po úspešnom importe a transakčnom mart refreshi ostane konkrétny
+`audit.pipeline_runs` riadok dočasne v stave `running`. Hostiteľský wrapper
+následne pod samostatným ML lockom vykoná:
+
+1. `validate`,
+2. `build-features`,
+3. `train-demand`,
+4. `train-lightgbm`,
+5. `select-hybrid`,
+6. `calibrate-intervals`,
+7. `build-inventory-risk`,
+8. `build-recommendations`.
+
+Až po úspechu všetkých krokov a dynamických API/dashboard smoke testov sa
+pipeline run zmení na `completed`. Pri chybe sa zmení na `failed`, uloží
+`error_stage`, ML summary do `metadata.ml` a wrapper odošle jeden email.
+
+ML vrstva nevytvára nákupné objednávky. Recommendations zostávajú
+`pending` a vyžadujú ľudské schválenie.
+
+Ručný read-only preflight:
+
+    scripts/run-ml-after-import.sh --preflight-only
+
+Manuálny ML príkaz používa rovnaký non-blocking lock:
+
+    scripts/run-ml-pipeline.sh self-check

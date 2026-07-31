@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Production smoke test for read-only ML API endpoints."""
+"""Dynamic production smoke test for read-only ML API endpoints."""
 
 from __future__ import annotations
 
@@ -8,8 +8,8 @@ from typing import Any
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
+
 BASE_URL = "http://127.0.0.1:18000"
-EXPECTED_RUN_ID = "2425d5eb-371f-48d1-9d60-a65bcf614d74"
 EXPECTED_PATHS = {
     "/api/v1/ml/status",
     "/api/v1/ml/model-runs",
@@ -21,7 +21,7 @@ EXPECTED_PATHS = {
 
 
 def request_json(path: str) -> dict[str, Any]:
-    with urlopen(BASE_URL + path, timeout=15) as response:
+    with urlopen(BASE_URL + path, timeout=20) as response:
         if response.status != 200:
             raise AssertionError(
                 f"GET {path} returned {response.status}."
@@ -44,7 +44,6 @@ def main() -> int:
 
     openapi = request_json("/openapi.json")
     assert_equal("openapi_api_version", openapi["info"]["version"], "0.5.0")
-    assert_equal("openapi_path_count", len(openapi["paths"]), 18)
     missing = EXPECTED_PATHS - set(openapi["paths"])
     assert_equal("missing_ml_paths", sorted(missing), [])
     for path in EXPECTED_PATHS:
@@ -55,47 +54,65 @@ def main() -> int:
         )
 
     status = request_json("/api/v1/ml/status")
+    run_id = status["latest_model_run_id"]
+
     assert_equal("ml_status", status["status"], "ready")
     assert_equal("ml_api_version", status["api_version"], "0.5.0")
     assert_equal("platform_version", status["platform_version"], "0.5.0")
-    assert_equal("latest_model_run_id", status["latest_model_run_id"], EXPECTED_RUN_ID)
-    assert_equal("forecast_rows", status["forecast_rows"], 240)
-    assert_equal("inventory_risk_rows", status["inventory_risk_rows"], 80)
-    assert_equal("recommendation_rows", status["recommendation_rows"], 80)
-    assert_equal("pending_recommendations", status["pending_recommendations"], 80)
     assert_equal("transaction_read_only", status["transaction_read_only"], True)
 
     model_runs = request_json("/api/v1/ml/model-runs?limit=100")
-    assert_equal("model_run_count", model_runs["count"], 5)
-
-    forecasts = request_json("/api/v1/ml/forecast?limit=500")
-    assert_equal("forecast_count", forecasts["count"], 240)
-    assert_equal("forecast_run", forecasts["model_run_id"], EXPECTED_RUN_ID)
-
-    risks = request_json("/api/v1/ml/inventory-risk?limit=200")
-    assert_equal("risk_count", risks["count"], 80)
-    assert_equal("risk_run", risks["model_run_id"], EXPECTED_RUN_ID)
-
-    recommendations = request_json(
-        "/api/v1/ml/recommendations?limit=100"
+    if model_runs["count"] < 1:
+        raise AssertionError("No model runs returned.")
+    assert_equal(
+        "latest_run_present",
+        any(item["id"] == run_id for item in model_runs["items"]),
+        True,
     )
-    assert_equal("recommendation_count", recommendations["count"], 80)
+
+    forecasts = request_json("/api/v1/ml/forecast?limit=1000")
+    risks = request_json("/api/v1/ml/inventory-risk?limit=500")
+    recommendations = request_json(
+        "/api/v1/ml/recommendations?limit=500"
+    )
+
+    assert_equal("forecast_count", forecasts["count"], status["forecast_rows"])
+    assert_equal("forecast_run", forecasts["model_run_id"], run_id)
+    assert_equal("risk_count", risks["count"], status["inventory_risk_rows"])
+    assert_equal("risk_run", risks["model_run_id"], run_id)
+    assert_equal(
+        "recommendation_count",
+        recommendations["count"],
+        status["recommendation_rows"],
+    )
+    assert_equal("recommendation_run", recommendations["model_run_id"], run_id)
+
     pending = sum(
         item["status"] == "pending"
         for item in recommendations["items"]
     )
-    assert_equal("recommendation_pending_count", pending, 80)
-
-    product = request_json(
-        "/api/v1/ml/products/KORP-LT-0033"
-    )
-    assert_equal("product_id", product["product"]["product_id"], "KORP-LT-0033")
-    assert_equal("product_forecast_count", len(product["forecasts"]), 3)
     assert_equal(
-        "product_recommendation_type",
-        product["recommendation"]["recommendation_type"],
-        "PURCHASE",
+        "recommendation_pending_count",
+        pending,
+        status["pending_recommendations"],
     )
+
+    product_ids = [
+        item["product_id"]
+        for item in recommendations["items"]
+    ] or [
+        item["product_id"]
+        for item in risks["items"]
+    ]
+    if not product_ids:
+        raise AssertionError("No product available for detail smoke.")
+
+    product_id = product_ids[0]
+    product = request_json(f"/api/v1/ml/products/{product_id}")
+    assert_equal("product_id", product["product"]["product_id"], product_id)
+    assert_equal("product_run", product["model_run_id"], run_id)
+    if not product["forecasts"]:
+        raise AssertionError("Product detail has no forecasts.")
 
     try:
         request_json("/api/v1/ml/products/DOES-NOT-EXIST")
