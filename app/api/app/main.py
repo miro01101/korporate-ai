@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse
 
 from app.analytics import router as analytics_router
 from app.ml_api import router as ml_router
+from app.ml_overview import router as ml_overview_router
 from app.config import get_settings
 from app.db import get_database_health
 
@@ -18,6 +19,7 @@ app = FastAPI(
 
 app.include_router(analytics_router)
 app.include_router(ml_router)
+app.include_router(ml_overview_router)
 
 
 @app.get("/")

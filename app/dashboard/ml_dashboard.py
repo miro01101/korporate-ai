@@ -380,6 +380,10 @@ def render_ml_dashboard(
             "/api/v1/ml/status",
             None,
         )
+        overview = api_get(
+            "/api/v1/ml/overview",
+            None,
+        )
         model_runs = api_get(
             "/api/v1/ml/model-runs",
             {"limit": 100},
@@ -452,91 +456,264 @@ def render_ml_dashboard(
 
     tabs = st.tabs(
         [
-            "ML prehľad",
-            "Predikcia dopytu",
-            "Riziko zásob",
+            "Prehľad modelu",
+            "Forecast",
+            "Skladové riziká",
             "Odporúčania",
             "Detail produktu",
         ]
     )
 
     with tabs[0]:
+        quality = overview.get("model_quality", {})
+        coverage = overview.get("coverage", {})
+        selection = overview.get("selection_counts", {})
+        dq = overview.get("data_quality", {})
+        feature = overview.get("feature_run", {})
+        lineage = overview.get("lineage", {})
+
+        def pct(value: Any) -> str:
+            if value is None:
+                return "—"
+            return f"{100.0 * safe_float(value):.1f} %"
+
+        st.subheader("Prehľad modelu")
+
+        cards = st.columns(4)
+        cards[0].metric(
+            "Baseline WAPE",
+            pct(quality.get("baseline", {}).get("median_wape")),
+            help="Nižšia hodnota je lepšia.",
+        )
+        cards[1].metric(
+            "LightGBM WAPE",
+            pct(quality.get("lightgbm", {}).get("median_wape")),
+            help="Nižšia hodnota je lepšia.",
+        )
+        cards[2].metric(
+            "Hybrid WAPE",
+            pct(quality.get("hybrid", {}).get("median_wape")),
+            help="Nižšia hodnota je lepšia.",
+        )
+        cards[3].metric(
+            "Coverage",
+            pct(coverage.get("overall_holdout")),
+            help="Pokrytie kalibrovaného intervalu na holdout dátach.",
+        )
+
         left, right = st.columns(2)
 
         with left:
-            st.subheader("Modelový stav")
+            st.markdown("#### Porovnanie modelov")
+            values = [
+                {
+                    "Model": label,
+                    "WAPE": 100.0 * safe_float(
+                        quality.get(key, {}).get("median_wape")
+                    ),
+                }
+                for label, key in (
+                    ("Baseline", "baseline"),
+                    ("LightGBM", "lightgbm"),
+                    ("Hybrid", "hybrid"),
+                )
+            ]
+            st.vega_lite_chart(
+                {
+                    "data": {"values": values},
+                    "mark": {"type": "bar", "cornerRadiusEnd": 4},
+                    "height": 300,
+                    "encoding": {
+                        "x": {
+                            "field": "Model",
+                            "type": "nominal",
+                            "sort": ["Baseline", "LightGBM", "Hybrid"],
+                            "title": None,
+                        },
+                        "y": {
+                            "field": "WAPE",
+                            "type": "quantitative",
+                            "title": "Median WAPE (%)",
+                            "scale": {"zero": True},
+                        },
+                        "tooltip": [
+                            {"field": "Model", "type": "nominal"},
+                            {
+                                "field": "WAPE",
+                                "type": "quantitative",
+                                "format": ".2f",
+                            },
+                        ],
+                    },
+                },
+                use_container_width=True,
+            )
+
+        with right:
+            st.markdown("#### Vybraný model podľa produktu")
+            values = [
+                {
+                    "Model": "Baseline",
+                    "Produkty": int(selection.get("baseline", 0)),
+                },
+                {
+                    "Model": "LightGBM",
+                    "Produkty": int(selection.get("lightgbm", 0)),
+                },
+            ]
+            st.vega_lite_chart(
+                {
+                    "data": {"values": values},
+                    "mark": {"type": "bar", "cornerRadiusEnd": 4},
+                    "height": 300,
+                    "encoding": {
+                        "y": {
+                            "field": "Model",
+                            "type": "nominal",
+                            "title": None,
+                        },
+                        "x": {
+                            "field": "Produkty",
+                            "type": "quantitative",
+                            "title": "Počet produktov",
+                            "scale": {"zero": True},
+                        },
+                        "tooltip": [
+                            {"field": "Model", "type": "nominal"},
+                            {"field": "Produkty", "type": "quantitative"},
+                        ],
+                    },
+                },
+                use_container_width=True,
+            )
+            st.caption(
+                "Cold-start produkty: "
+                f"{int(selection.get('cold_start', 0))}."
+            )
+
+        st.markdown("#### Kalibrácia intervalov")
+        coverage_cards = st.columns(3)
+        coverage_cards[0].metric(
+            "Celkové holdout coverage",
+            pct(coverage.get("overall_holdout")),
+        )
+        coverage_cards[1].metric(
+            "Minimum podľa horizontu",
+            pct(coverage.get("minimum_horizon")),
+        )
+        coverage_cards[2].metric(
+            "Minimum model × horizont",
+            pct(coverage.get("minimum_cell")),
+        )
+
+        st.markdown("#### Data-quality warningy")
+        warning_count = int(dq.get("warning_count", 0))
+        critical_count = int(dq.get("critical_count", 0))
+        issue_count = int(dq.get("issue_count", 0))
+
+        if critical_count:
+            st.error(f"Kritické dátové chyby: {critical_count}.")
+        elif warning_count:
+            st.warning(
+                f"Validácia má {warning_count} upozornenie "
+                f"z {issue_count} nálezov. Odporúčania ostávajú pending."
+            )
+        else:
+            st.success("Validácia nemá kritické chyby ani warningy.")
+
+        issue_rows = [
+            {
+                "Závažnosť": row.get("severity"),
+                "Kontrola": row.get("check_code"),
+                "Entita": row.get("entity_type"),
+                "Stĺpec": row.get("column_name"),
+                "Správa": row.get("message"),
+                "Hodnota": str(row.get("observed_value")),
+            }
+            for row in dq.get("issues", [])
+        ]
+        if issue_rows:
+            st.dataframe(
+                issue_rows,
+                use_container_width=True,
+                hide_index=True,
+            )
+
+        st.markdown("#### Feature run a model lineage")
+        feature_col, lineage_col = st.columns(2)
+
+        with feature_col:
             st.dataframe(
                 [
+                    {"Ukazovateľ": "Feature run", "Hodnota": feature.get("id")},
                     {
-                        "Ukazovateľ": "API verzia",
-                        "Hodnota": status.get(
-                            "api_version"
+                        "Ukazovateľ": "Feature verzia",
+                        "Hodnota": feature.get("feature_version"),
+                    },
+                    {
+                        "Ukazovateľ": "Produkty",
+                        "Hodnota": feature.get("product_count"),
+                    },
+                    {
+                        "Ukazovateľ": "Riadky",
+                        "Hodnota": feature.get("row_count"),
+                    },
+                    {
+                        "Ukazovateľ": "Sales cutoff",
+                        "Hodnota": feature.get("sales_source_max_month"),
+                    },
+                    {
+                        "Ukazovateľ": "Inventory mesiac",
+                        "Hodnota": feature.get(
+                            "inventory_source_max_month"
                         ),
                     },
                     {
-                        "Ukazovateľ":
-                            "Platformová verzia",
-                        "Hodnota": status.get(
-                            "platform_version"
-                        ),
-                    },
-                    {
-                        "Ukazovateľ":
-                            "Posledný model run",
-                        "Hodnota": status.get(
-                            "latest_model_run_id"
-                        ),
-                    },
-                    {
-                        "Ukazovateľ":
-                            "Training cutoff",
-                        "Hodnota": status.get(
-                            "training_cutoff"
-                        ),
-                    },
-                    {
-                        "Ukazovateľ":
-                            "Horizont",
-                        "Hodnota":
-                            f"{status.get('forecast_horizon_months')} mesiace",
-                    },
-                    {
-                        "Ukazovateľ":
-                            "Read-only transakcie",
-                        "Hodnota": status.get(
-                            "transaction_read_only"
-                        ),
+                        "Ukazovateľ": "Panel maximum",
+                        "Hodnota": feature.get("panel_max_month"),
                     },
                 ],
                 use_container_width=True,
                 hide_index=True,
             )
 
-        with right:
-            st.subheader("Typy odporúčaní")
-            render_recommendation_chart(
-                recommendations
+        with lineage_col:
+            labels = (
+                ("Data quality", "data_quality_run_id"),
+                ("Feature run", "feature_run_id"),
+                ("Baseline", "baseline_run_id"),
+                ("LightGBM", "lightgbm_run_id"),
+                ("Hybrid", "hybrid_run_id"),
+                ("Kalibrovaný model", "calibrated_run_id"),
+            )
+            st.dataframe(
+                [
+                    {"Fáza": label, "Run ID": lineage.get(key)}
+                    for label, key in labels
+                ],
+                use_container_width=True,
+                hide_index=True,
             )
 
-        st.subheader("Model runs")
-        st.dataframe(
-            [
+        with st.expander("Technický detail lineage"):
+            st.json(
                 {
-                    "ID": row.get("id"),
-                    "Stav": row.get("status"),
-                    "Rodina": row.get("model_family"),
-                    "Verzia": row.get("model_version"),
-                    "Cutoff": row.get("training_cutoff"),
-                    "Horizont":
-                        row.get("forecast_horizon_months"),
-                    "Začiatok": row.get("started_at"),
-                    "Koniec": row.get("finished_at"),
+                    "training_cutoff": overview.get("training_cutoff"),
+                    "forecast_period": overview.get("forecast_period"),
+                    "dataset_fingerprint": lineage.get(
+                        "dataset_fingerprint"
+                    ),
+                    "feature_git_commit": lineage.get(
+                        "feature_git_commit"
+                    ),
+                    "calibrated_code_commit": lineage.get(
+                        "calibrated_code_commit"
+                    ),
+                    "calibrated_finished_at": lineage.get(
+                        "calibrated_finished_at"
+                    ),
                 }
-                for row in model_runs
-            ],
-            use_container_width=True,
-            hide_index=True,
-        )
+            )
 
     with tabs[1]:
         if not product_ids:
