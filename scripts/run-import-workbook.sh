@@ -14,7 +14,7 @@ Workbook musi byt ulozeny pod:
   /srv/korporate-ai/imports/manual
 
 Importer image:
-  korporate-ai-importer:0.4.0
+  korporate-ai-importer:0.5.1
 EOF
 }
 
@@ -28,7 +28,7 @@ REPOSITORY_ROOT="$(
     pwd
 )"
 MANUAL_IMPORT_ROOT="/srv/korporate-ai/imports/manual"
-IMPORTER_IMAGE="${KORPORATE_IMPORTER_IMAGE:-korporate-ai-importer:0.4.0}"
+IMPORTER_IMAGE="${KORPORATE_IMPORTER_IMAGE:-korporate-ai-importer:0.5.1}"
 WORKBOOK_HOST="$(realpath -e "$1")"
 shift
 

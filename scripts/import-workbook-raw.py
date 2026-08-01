@@ -14,6 +14,7 @@ import psycopg
 from psycopg.errors import UniqueViolation
 from psycopg.types.json import Jsonb
 from openpyxl import load_workbook
+from workbook_normalization import normalize_workbook
 
 
 SHEETS = {
@@ -162,9 +163,10 @@ def main() -> int:
 
     workbook = load_workbook(
         filename=workbook_path,
-        read_only=True,
+        read_only=False,
         data_only=False,
     )
+    normalize_workbook(workbook)
 
     missing_sheets = sorted(set(SHEETS) - set(workbook.sheetnames))
     if missing_sheets:

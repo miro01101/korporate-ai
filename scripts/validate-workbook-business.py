@@ -5,6 +5,7 @@ from pathlib import Path
 import sys
 
 from openpyxl import load_workbook
+from workbook_normalization import normalize_workbook
 
 MAX_EXAMPLES = 20
 HEADERS = {
@@ -143,7 +144,8 @@ def repeated_product_warning(grouped, sheet, order_field, code):
 
 
 try:
-    workbook = load_workbook(path, read_only=True, data_only=False)
+    workbook = load_workbook(path, read_only=False, data_only=False)
+    normalize_workbook(workbook)
 except Exception as exc:
     print(f"Workbook sa nepodarilo otvorit: {exc}", file=sys.stderr)
     raise SystemExit(2) from exc
@@ -321,7 +323,19 @@ for row in purchases:
             warn("BIZ-W009", "purchases", row["_row"], order_id, "ordered_quantity", ordered,
                  f"nasobok minimum_order_quantity {minimum}")
 
-header_consistency(purchases_by_order, "purchases", ("order_date", "supplier"), "BIZ-E051")
+header_consistency(purchases_by_order, "purchases", ("order_date",), "BIZ-E051")
+for purchase_order_id, group in purchases_by_order.items():
+    suppliers = sorted({str(row["supplier"]) for row in group})
+    if len(suppliers) > 1:
+        warn(
+            "BIZ-W021",
+            "purchases",
+            None,
+            purchase_order_id,
+            "supplier",
+            suppliers,
+            "automaticka normalizacia na source_purchase_order_id + supplier",
+        )
 repeated_product_warning(purchases_by_order, "purchases", "purchase_order_id", "BIZ-W011")
 
 expedition_by_order = {}

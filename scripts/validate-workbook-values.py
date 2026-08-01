@@ -7,6 +7,7 @@ import re
 import sys
 
 from openpyxl import load_workbook
+from workbook_normalization import normalize_workbook
 
 
 DECIMAL_PATTERN = re.compile(
@@ -253,9 +254,10 @@ def validate_value(
 
 workbook = load_workbook(
     filename=path,
-    read_only=True,
+    read_only=False,
     data_only=False,
 )
+normalize_workbook(workbook)
 
 if "data_dictionary" not in workbook.sheetnames:
     raise SystemExit("Chyba povinny sheet data_dictionary.")

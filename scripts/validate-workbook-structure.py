@@ -17,7 +17,7 @@ if not path.is_file():
 
 workbook = load_workbook(
     filename=path,
-    read_only=True,
+    read_only=False,
     data_only=False,
 )
 

@@ -7,7 +7,7 @@ REPOSITORY_ROOT="$(
 )"
 cd "$REPOSITORY_ROOT" || exit 1
 
-IMPORTER_IMAGE="${KORPORATE_IMPORTER_IMAGE:-korporate-ai-importer:0.5.0}"
+IMPORTER_IMAGE="${KORPORATE_IMPORTER_IMAGE:-korporate-ai-importer:0.5.1}"
 ML_IMAGE="${KORPORATE_ML_IMAGE:-korporate-ai-ml:0.5.0}"
 IMPORT_ROOT="/srv/korporate-ai/imports/manual"
 

@@ -24,7 +24,7 @@ VALIDATION_SCRIPTS = (
 PIPELINE_SCRIPTS = {
     "raw": "import-workbook-raw.py",
     "staging": "transform-raw-to-staging.py",
-    "core": "validate-and-promote-staging.py",
+    "core": "merge-and-promote-staging.py",
     "finalize": "finalize-import-batch.py",
 }
 
