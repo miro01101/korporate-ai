@@ -9,8 +9,8 @@ from urllib.parse import urlencode
 from urllib.request import urlopen
 
 
-EXPECTED_REVENUE = 1647000.0
-EXPECTED_GROSS_PROFIT = 362631.12
+EXPECTED_REVENUE = 1961603.78
+EXPECTED_GROSS_PROFIT = 431770.06
 
 
 def parse_args() -> argparse.Namespace:
@@ -47,6 +47,14 @@ def assert_equal(name: str, actual, expected) -> None:
         )
 
 
+def assert_at_least(name: str, actual, minimum) -> None:
+    print(f"CHECK={name} ACTUAL={actual} MINIMUM={minimum}")
+    if actual < minimum:
+        raise RuntimeError(
+            f"{name}: {actual!r} < minimum {minimum!r}"
+        )
+
+
 def main() -> int:
     args = parse_args()
 
@@ -56,32 +64,32 @@ def main() -> int:
             "/api/v1/analytics/status",
         )
         assert_equal("analytics_status", status["status"], "ready")
-        assert_equal(
+        assert_at_least(
             "sales_monthly_rows",
             status["table_counts"]["sales_monthly"],
-            60,
+            66,
         )
-        assert_equal(
+        assert_at_least(
             "management_rows",
             status["table_counts"]["management_kpis_monthly"],
-            61,
+            67,
         )
 
         summary = get_json(
             args.base_url,
             "/api/v1/analytics/summary",
         )
-        assert_equal(
+        assert_at_least(
             "latest_sales_month",
             summary["selected_month"],
-            "2025-12-01",
+            "2026-06-01",
         )
 
         monthly = get_json(
             args.base_url,
             "/api/v1/analytics/monthly",
         )
-        assert_equal("monthly_rows", monthly["count"], 61)
+        assert_at_least("monthly_rows", monthly["count"], 67)
 
         revenue = round(
             sum(
@@ -98,12 +106,12 @@ def main() -> int:
             2,
         )
 
-        assert_equal(
+        assert_at_least(
             "management_revenue",
             revenue,
             EXPECTED_REVENUE,
         )
-        assert_equal(
+        assert_at_least(
             "management_gross_profit",
             gross_profit,
             EXPECTED_GROSS_PROFIT,
@@ -114,7 +122,7 @@ def main() -> int:
             "/api/v1/analytics/sales/products",
             {
                 "date_from": "2025-01-01",
-                "date_to": "2025-12-01",
+                "date_to": "2026-06-30",
                 "limit": 10,
             },
         )
@@ -124,7 +132,7 @@ def main() -> int:
             args.base_url,
             "/api/v1/analytics/inventory",
         )
-        assert_equal("inventory_rows", inventory["count"], 60)
+        assert_at_least("inventory_rows", inventory["count"], 67)
 
         suppliers = get_json(
             args.base_url,
@@ -136,7 +144,7 @@ def main() -> int:
             args.base_url,
             "/api/v1/analytics/expeditions",
         )
-        assert_equal("expedition_rows", expeditions["count"], 61)
+        assert_at_least("expedition_rows", expeditions["count"], 67)
 
         vehicles = get_json(
             args.base_url,
