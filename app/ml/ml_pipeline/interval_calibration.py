@@ -21,6 +21,10 @@ from ml_pipeline.lightgbm_challenger import (
     fit_quantile_models,
     prepare_model_frame,
 )
+from ml_pipeline.temporal import (
+    filter_features_to_training_cutoff,
+    validate_forecast_window,
+)
 
 
 MODEL_FAMILY = "hybrid_calibrated"
@@ -785,6 +789,11 @@ def _load_context(
         (feature_run_id,),
     )
 
+    features = filter_features_to_training_cutoff(
+        features,
+        row["training_cutoff"],
+    )
+
     parent_forecasts = query_frame(
         connection,
         """
@@ -811,6 +820,13 @@ def _load_context(
         ORDER BY product_id, forecast_month
         """,
         (parent_hybrid_run_id,),
+    )
+
+    validate_forecast_window(
+        parent_forecasts,
+        training_cutoff=row["training_cutoff"],
+        horizons=FORECAST_HORIZONS,
+        label="hybrid parent forecasts",
     )
 
     return (
@@ -1225,6 +1241,9 @@ def run_interval_calibration(
         ),
         "provisional_champion": True,
         "automatic_inventory_actions": False,
+        "training_cutoff_source": (
+            "validated_parent_hybrid_run"
+        ),
         "time_series_guarantee_note": (
             "Empirical rolling-origin holdout gate; "
             "classical exchangeability guarantee is "

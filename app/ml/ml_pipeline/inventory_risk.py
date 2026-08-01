@@ -210,12 +210,10 @@ def build_inventory_risk_frame(
     if products["snapshot_date"].iloc[0] != as_of_date:
         raise ValueError("Snapshot date differs from as-of date.")
 
-    expected_first_month = (
-        pd.Timestamp(as_of_date) + pd.offsets.MonthBegin(1)
-    ).date()
+    expected_first_month = as_of_date
     if min(forecasts["forecast_month"]) != expected_first_month:
         raise ValueError(
-            "First forecast month must immediately follow the as-of month."
+            "First forecast month must equal the inventory as-of month."
         )
 
     if (purchases["outstanding_quantity"] < 0).any():
@@ -455,7 +453,6 @@ def _load_context(
 
     run_row = run.iloc[0]
     model_run_id = run_row["id"]
-    training_cutoff = run_row["training_cutoff"]
     if int(run_row["forecast_horizon_months"]) != len(FORECAST_HORIZONS):
         raise RuntimeError("Calibrated run must contain three horizons.")
 
@@ -475,6 +472,16 @@ def _load_context(
         """,
         (model_run_id,),
     )
+
+    if forecasts.empty:
+        raise RuntimeError(
+            "Calibrated run does not contain forecasts."
+        )
+
+    forecast_start = pd.to_datetime(
+        forecasts["forecast_month"],
+        errors="raise",
+    ).min().date()
 
     products = query_frame(
         connection,
@@ -500,10 +507,12 @@ def _load_context(
           ON products.product_id = lines.product_id
         ORDER BY products.product_id
         """,
-        (training_cutoff,),
+        (forecast_start,),
     )
     if products.empty:
-        raise RuntimeError("No inventory snapshot exists before the cutoff.")
+        raise RuntimeError(
+            "No inventory snapshot exists on or before the first forecast month."
+        )
 
     as_of_date = products.iloc[0]["snapshot_date"]
 

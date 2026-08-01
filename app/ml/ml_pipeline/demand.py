@@ -17,6 +17,10 @@ from ml_pipeline.forecasting import (
     forecast_quantiles_from_backtest,
     select_baseline_model,
 )
+from ml_pipeline.temporal import (
+    filter_features_to_training_cutoff,
+    training_cutoff_from_metadata,
+)
 
 
 FORECAST_HORIZON_MONTHS = 3
@@ -508,7 +512,8 @@ def _latest_feature_context(
             id,
             feature_version,
             source_max_month,
-            dataset_fingerprint
+            dataset_fingerprint,
+            metadata
         FROM ml.feature_runs
         WHERE status = 'completed'
         ORDER BY finished_at DESC
@@ -528,9 +533,9 @@ def _latest_feature_context(
         row["feature_version"]
     )
 
-    training_cutoff = row[
-        "source_max_month"
-    ]
+    training_cutoff = training_cutoff_from_metadata(
+        row["metadata"]
+    )
 
     fingerprint = str(
         row["dataset_fingerprint"]
@@ -550,6 +555,11 @@ def _latest_feature_context(
         ORDER BY product_id, month_start
         """,
         (feature_run_id,),
+    )
+
+    features = filter_features_to_training_cutoff(
+        features,
+        training_cutoff,
     )
 
     return (
@@ -592,6 +602,9 @@ def run_demand_training(
         ),
         "interval_method": (
             "rolling_backtest_residual_quantiles"
+        ),
+        "training_cutoff_source": (
+            "feature_run.metadata.sales_source_max_month"
         ),
     }
 

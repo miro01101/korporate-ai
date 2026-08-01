@@ -46,7 +46,7 @@ class InventoryRiskTests(unittest.TestCase):
                     "minimum_order_quantity": 7,
                     "stock_available": stock_available,
                     "max_stock": max_stock,
-                    "snapshot_date": date(2025, 12, 1),
+                    "snapshot_date": date(2026, 1, 1),
                 }
             ]
         )
@@ -84,7 +84,7 @@ class InventoryRiskTests(unittest.TestCase):
             [
                 {
                     "product_id": "P1",
-                    "delivery_date": date(2025, 12, 6),
+                    "delivery_date": date(2026, 1, 6),
                     "outstanding_quantity": 2,
                 }
             ]
@@ -129,7 +129,7 @@ class InventoryRiskTests(unittest.TestCase):
             forecasts,
             purchases,
             model_run_id=uuid4(),
-            as_of_date=date(2025, 12, 1),
+            as_of_date=date(2026, 1, 1),
             expected_product_count=1,
         )
 
@@ -140,7 +140,7 @@ class InventoryRiskTests(unittest.TestCase):
         self.assertEqual(row["safety_stock"], 10.0)
         self.assertEqual(row["reorder_point"], 20.0)
         self.assertEqual(row["recommended_order_quantity"], 21)
-        self.assertEqual(row["recommended_order_date"], date(2025, 12, 1))
+        self.assertEqual(row["recommended_order_date"], date(2026, 1, 1))
 
         for column in (
             "stockout_probability_30d",
@@ -162,7 +162,7 @@ class InventoryRiskTests(unittest.TestCase):
             forecasts,
             purchases.iloc[0:0],
             model_run_id=uuid4(),
-            as_of_date=date(2025, 12, 1),
+            as_of_date=date(2026, 1, 1),
             expected_product_count=1,
         )
 
@@ -171,6 +171,27 @@ class InventoryRiskTests(unittest.TestCase):
         self.assertEqual(row["recommended_order_quantity"], 0)
         self.assertIsNone(row["recommended_order_date"])
         self.assertGreater(row["overstock_probability_90d"], 0.0)
+
+    def test_forecast_must_start_in_snapshot_month(self) -> None:
+        products, forecasts, purchases = self._frames()
+        forecasts["forecast_month"] = [
+            date(2026, 2, 1),
+            date(2026, 3, 1),
+            date(2026, 4, 1),
+        ]
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "must equal the inventory as-of month",
+        ):
+            build_inventory_risk_frame(
+                products,
+                forecasts,
+                purchases,
+                model_run_id=uuid4(),
+                as_of_date=date(2026, 1, 1),
+                expected_product_count=1,
+            )
 
     def test_lead_time_above_mvp_guard_is_rejected(self) -> None:
         products, forecasts, purchases = self._frames()
@@ -185,7 +206,7 @@ class InventoryRiskTests(unittest.TestCase):
                 forecasts,
                 purchases,
                 model_run_id=uuid4(),
-                as_of_date=date(2025, 12, 1),
+                as_of_date=date(2026, 1, 1),
                 expected_product_count=1,
             )
 

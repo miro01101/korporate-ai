@@ -54,6 +54,7 @@ from ml_pipeline.recommendation_engine import (
     POLICY_VERSION as RECOMMENDATION_POLICY_VERSION,
     run_recommendation_engine,
 )
+from ml_pipeline.temporal import feature_temporal_metadata
 
 
 def git_commit() -> str | None:
@@ -395,6 +396,12 @@ def build_features_command() -> int:
         features["month_start"].max().date()
     )
 
+    temporal_metadata = feature_temporal_metadata(
+        frames["sales"],
+        frames["inventory"],
+        features,
+    )
+
     product_count = int(
         features["product_id"].nunique()
     )
@@ -444,6 +451,7 @@ def build_features_command() -> int:
                             {
                                 "grain": "product_month",
                                 "zero_filled_panel": True,
+                                **temporal_metadata,
                             }
                         ),
                     ),
@@ -521,6 +529,18 @@ def build_features_command() -> int:
     print(f"feature_row_count={row_count}")
     print(f"feature_source_min_month={source_min_month}")
     print(f"feature_source_max_month={source_max_month}")
+    print(
+        "sales_source_max_month="
+        f"{temporal_metadata['sales_source_max_month']}"
+    )
+    print(
+        "inventory_source_max_month="
+        f"{temporal_metadata['inventory_source_max_month']}"
+    )
+    print(
+        "panel_max_month="
+        f"{temporal_metadata['panel_max_month']}"
+    )
     print(f"dataset_fingerprint={fingerprint}")
     print("ML_FEATURE_BUILD=PASS")
 

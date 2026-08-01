@@ -20,6 +20,10 @@ from psycopg.types.json import Jsonb
 from sklearn.metrics import mean_pinball_loss
 
 from ml_pipeline.db import execute_many, query_frame
+from ml_pipeline.temporal import (
+    filter_features_to_training_cutoff,
+    training_cutoff_from_metadata,
+)
 
 
 MODEL_FAMILY = "global_lightgbm_quantile"
@@ -1049,7 +1053,8 @@ def _latest_feature_context(
             id,
             feature_version,
             source_max_month,
-            dataset_fingerprint
+            dataset_fingerprint,
+            metadata
         FROM ml.feature_runs
         WHERE status = 'completed'
         ORDER BY finished_at DESC
@@ -1069,9 +1074,9 @@ def _latest_feature_context(
         row["feature_version"]
     )
 
-    training_cutoff = row[
-        "source_max_month"
-    ]
+    training_cutoff = training_cutoff_from_metadata(
+        row["metadata"]
+    )
 
     fingerprint = str(
         row["dataset_fingerprint"]
@@ -1106,6 +1111,11 @@ def _latest_feature_context(
         ORDER BY product_id, month_start
         """,
         (feature_run_id,),
+    )
+
+    features = filter_features_to_training_cutoff(
+        features,
+        training_cutoff,
     )
 
     return (
@@ -1219,6 +1229,9 @@ def run_lightgbm_training(
         ),
         "promotion_margin": (
             PROMOTION_MARGIN
+        ),
+        "training_cutoff_source": (
+            "feature_run.metadata.sales_source_max_month"
         ),
         "baseline_run_id": str(
             baseline_run_id

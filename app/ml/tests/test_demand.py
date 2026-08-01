@@ -9,6 +9,9 @@ from ml_pipeline.demand import (
     FORECAST_HORIZON_MONTHS,
     build_demand_outputs,
 )
+from ml_pipeline.temporal import (
+    filter_features_to_training_cutoff,
+)
 
 
 class DemandOutputTests(unittest.TestCase):
@@ -137,6 +140,40 @@ class DemandOutputTests(unittest.TestCase):
                 forecast["is_cold_start"]
                 for forecast in cold_forecasts
             )
+        )
+
+    def test_inventory_only_month_is_not_a_demand_target(self) -> None:
+        features = self.feature_frame()
+        inventory_only = features[
+            features["month_start"]
+            == features["month_start"].max()
+        ].copy()
+        inventory_only["month_start"] = pd.Timestamp(
+            "2026-01-01"
+        )
+        inventory_only["units_sold"] = 0.0
+
+        panel = pd.concat(
+            [features, inventory_only],
+            ignore_index=True,
+        )
+
+        training = filter_features_to_training_cutoff(
+            panel,
+            pd.Timestamp("2025-12-01"),
+        )
+        output = build_demand_outputs(training)
+        forecast_months = sorted(
+            {row["forecast_month"] for row in output.forecasts}
+        )
+
+        self.assertEqual(
+            forecast_months,
+            [
+                pd.Timestamp("2026-01-01").date(),
+                pd.Timestamp("2026-02-01").date(),
+                pd.Timestamp("2026-03-01").date(),
+            ],
         )
 
     def test_metrics_include_aggregate_rows(self) -> None:

@@ -10,6 +10,7 @@ from psycopg import Connection
 from psycopg.types.json import Jsonb
 
 from ml_pipeline.db import execute_many, query_frame
+from ml_pipeline.temporal import validate_forecast_window
 
 
 MODEL_FAMILY = "hybrid_champion"
@@ -437,7 +438,10 @@ def _load_context(
         """
         SELECT
             id,
-            model_family
+            model_family,
+            training_cutoff,
+            forecast_horizon_months,
+            dataset_fingerprint
         FROM ml.model_runs
         WHERE feature_run_id = %s
           AND status = 'completed'
@@ -470,10 +474,44 @@ def _load_context(
             "No completed LightGBM run exists."
         )
 
-    baseline_run_id = baseline_rows.iloc[0]["id"]
-    challenger_run_id = (
-        challenger_rows.iloc[0]["id"]
-    )
+    baseline_row = baseline_rows.iloc[0]
+    challenger_row = challenger_rows.iloc[0]
+
+    baseline_run_id = baseline_row["id"]
+    challenger_run_id = challenger_row["id"]
+
+    training_cutoff = baseline_row["training_cutoff"]
+
+    if challenger_row["training_cutoff"] != training_cutoff:
+        raise RuntimeError(
+            "Baseline and challenger training cutoffs differ."
+        )
+
+    if (
+        str(baseline_row["dataset_fingerprint"])
+        != str(challenger_row["dataset_fingerprint"])
+    ):
+        raise RuntimeError(
+            "Baseline and challenger dataset fingerprints differ."
+        )
+
+    if (
+        str(baseline_row["dataset_fingerprint"])
+        != str(feature_row["dataset_fingerprint"])
+    ):
+        raise RuntimeError(
+            "Parent model fingerprint differs from the feature run."
+        )
+
+    if int(baseline_row["forecast_horizon_months"]) != 3:
+        raise RuntimeError(
+            "Baseline run must contain three forecast horizons."
+        )
+
+    if int(challenger_row["forecast_horizon_months"]) != 3:
+        raise RuntimeError(
+            "Challenger run must contain three forecast horizons."
+        )
 
     baseline_products = query_frame(
         connection,
@@ -542,10 +580,52 @@ def _load_context(
         (challenger_run_id,),
     )
 
+    validate_forecast_window(
+        baseline_forecasts,
+        training_cutoff=training_cutoff,
+        horizons=(1, 2, 3),
+        label="baseline forecasts",
+    )
+    validate_forecast_window(
+        challenger_forecasts,
+        training_cutoff=training_cutoff,
+        horizons=(1, 2, 3),
+        label="challenger forecasts",
+    )
+
+    baseline_keys = baseline_forecasts[
+        ["product_id", "forecast_month", "horizon"]
+    ].copy()
+    challenger_keys = challenger_forecasts[
+        ["product_id", "forecast_month", "horizon"]
+    ].copy()
+
+    for frame in (baseline_keys, challenger_keys):
+        frame["product_id"] = frame["product_id"].astype(str)
+        frame["forecast_month"] = pd.to_datetime(
+            frame["forecast_month"],
+            errors="raise",
+        )
+        frame["horizon"] = pd.to_numeric(
+            frame["horizon"],
+            errors="raise",
+        ).astype(int)
+        frame.sort_values(
+            ["product_id", "horizon"],
+            kind="stable",
+            inplace=True,
+        )
+        frame.reset_index(drop=True, inplace=True)
+
+    if not baseline_keys.equals(challenger_keys):
+        raise RuntimeError(
+            "Baseline and challenger forecast windows differ."
+        )
+
     return (
         feature_run_id,
         str(feature_row["feature_version"]),
-        feature_row["source_max_month"],
+        training_cutoff,
         str(feature_row["dataset_fingerprint"]),
         baseline_run_id,
         challenger_run_id,
@@ -666,6 +746,9 @@ def run_hybrid_selection(
         "inventory_risk_ready": False,
         "interval_calibration_required": True,
         "provisional_champion": True,
+        "training_cutoff_source": (
+            "validated_parent_model_runs"
+        ),
         "selection_bias_warning": (
             "Model selection and reported WAPE use "
             "the same rolling backtest period. "
