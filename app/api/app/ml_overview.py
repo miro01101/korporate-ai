@@ -143,24 +143,17 @@ def ml_overview() -> dict[str, Any]:
         """
         SELECT
             model_run_id,
-            coalesce(
-                max(metric_value) FILTER (
-                    WHERE product_id IS NULL
-                      AND metric_name = 'median_product_wape'
-                ),
-                percentile_cont(0.5)
-                WITHIN GROUP (ORDER BY metric_value)
-                FILTER (
-                    WHERE product_id IS NOT NULL
-                      AND metric_name = 'wape'
-                )
+            percentile_cont(0.5)
+            WITHIN GROUP (
+                ORDER BY backtest_wape
             ) AS median_wape
-        FROM ml.model_metrics
+        FROM ml.forecasts
         WHERE model_run_id IN (
             CAST(:baseline AS uuid),
             CAST(:lightgbm AS uuid),
             CAST(:hybrid AS uuid)
         )
+          AND backtest_wape IS NOT NULL
         GROUP BY model_run_id
         """,
         ids,

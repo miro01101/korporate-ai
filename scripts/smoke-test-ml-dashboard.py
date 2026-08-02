@@ -18,6 +18,7 @@ EXPECTED_ML_PATHS = {
     "/api/v1/ml/inventory-risk",
     "/api/v1/ml/recommendations",
     "/api/v1/ml/products/{product_id}",
+    "/api/v1/ml/overview",
 }
 
 
